@@ -71,8 +71,12 @@ echo -e "${BLUE}[2] NETWORK ANONYMITY${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Check Tor service
-if systemctl is-active --quiet tor 2>/dev/null; then
+if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet tor; then
     check_status "Tor Service" "PASS" "Running"
+elif command -v service >/dev/null 2>&1 && service tor status >/dev/null 2>&1; then
+    check_status "Tor Service" "PASS" "Running (init.d)"
+elif pgrep -x tor >/dev/null 2>&1; then
+    check_status "Tor Service" "PASS" "Running (process found)"
 else
     check_status "Tor Service" "FAIL" "Not running"
 fi
@@ -167,8 +171,12 @@ echo -e "${BLUE}[5] DOCKER & CONTAINERS${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Docker service
-if systemctl is-active --quiet docker 2>/dev/null; then
+if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet docker; then
     check_status "Docker Service" "PASS" "Running"
+elif command -v service >/dev/null 2>&1 && service docker status >/dev/null 2>&1; then
+    check_status "Docker Service" "PASS" "Running (init.d)"
+elif pgrep -x dockerd >/dev/null 2>&1; then
+    check_status "Docker Service" "PASS" "Running (dockerd found)"
 else
     check_status "Docker Service" "FAIL" "Not running"
 fi
@@ -292,11 +300,22 @@ else
     if [ "$CURRENT_USER" != "anon" ]; then
         echo "  → Run: anon-mode"
     fi
-    if ! systemctl is-active --quiet tor 2>/dev/null; then
-        echo "  → Run: sudo systemctl start tor"
+    
+    # tor fix
+    TOR_START="sudo tor &"
+    if command -v systemctl >/dev/null 2>&1; then TOR_START="sudo systemctl start tor"
+    elif command -v service >/dev/null 2>&1; then TOR_START="sudo service tor start"; fi
+    
+    # docker fix
+    DOCKER_START="sudo dockerd &"
+    if command -v systemctl >/dev/null 2>&1; then DOCKER_START="sudo systemctl start docker"
+    elif command -v service >/dev/null 2>&1; then DOCKER_START="sudo service docker start"; fi
+
+    if ! pgrep -x tor >/dev/null 2>&1; then
+        echo "  → Run: $TOR_START"
     fi
-    if ! systemctl is-active --quiet docker 2>/dev/null; then
-        echo "  → Run: sudo systemctl start docker"
+    if ! pgrep -x dockerd >/dev/null 2>&1 && ! pgrep -x docker >/dev/null 2>&1; then
+        echo "  → Run: $DOCKER_START"
     fi
     echo ""
     exit 1

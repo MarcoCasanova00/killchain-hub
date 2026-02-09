@@ -1,0 +1,28 @@
+# Killchain-Hub Python Dependencies
+
+# Web enumeration and scanning
+dirsearch>=0.4.3
+sqlmap>=1.7.2
+
+# Network and protocol tools
+impacket>=0.11.0
+scapy>=2.5.0
+
+# HTTP utilities
+requests>=2.31.0
+urllib3>=2.0.0
+
+# Parsing and data extraction
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# DNS and subdomain tools
+dnspython>=2.4.0
+
+# Reporting and output
+jinja2>=3.1.2
+pyyaml>=6.0
+
+# Additional utilities
+colorama>=0.4.6
+tqdm>=4.66.0

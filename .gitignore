@@ -1,0 +1,56 @@
+# Logs
+*.log
+killchain_logs/
+/home/anon/killchain_logs/
+
+# Temporary files
+*.tmp
+*.swp
+*~
+.cache/
+
+# User-specific config (contains sensitive settings)
+.killchain-hub.conf
+
+# Docker volumes and containers
+docker-volumes/
+*.tar
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Go
+go.sum
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Sensitive data
+*.key
+*.pem
+*.crt
+credentials.json
+secrets/
+
+# Test outputs
+test_results/
+*.pcap
+
+# Backup files
+*.backup
+*.bak
+*~

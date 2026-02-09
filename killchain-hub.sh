@@ -6,6 +6,9 @@ if [ -z "$BASH_VERSION" ]; then
     exec bash "$0" "$@"
 fi
 
+# Reset terminal to sane state to fix any residual echo/input issues
+stty sane 2>/dev/null
+
 VERSION="5.0"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -145,11 +148,14 @@ chmod 755 "$LOGBASE"
 echo -e "Logs base: ${YELLOW}$LOGBASE/${NC}\n"
 
 # ===== INPUT =====
-read -p "Target dominio (es. esempio.it): " TARGET
+echo -ne "Target dominio (es. esempio.it): "
+read TARGET
 [ -z "$TARGET" ] && { echo -e "${RED}Target richiesto!${NC}"; exit 1; }
 
-read -p "Email list file (opz): " EMAILLIST
-read -p "Wordlist ($DEFAULT_WORDLIST): " WORDLIST
+echo -ne "Email list file (opz): "
+read EMAILLIST
+echo -ne "Wordlist ($DEFAULT_WORDLIST): "
+read WORDLIST
 WORDLIST=${WORDLIST:-"$DEFAULT_WORDLIST"}
 
 # Create session log directory
@@ -175,7 +181,8 @@ echo "5) Evasion Test"
 echo "6) Full Auto (Recon Docker → Scan → Web)"
 echo "7) Advanced Tools (subfinder/nuclei/sqlmap/ffuf)"
 echo "8) Generate Report"
-read -p "> " FASE
+echo -ne "> "
+read FASE
 
 case $FASE in
 0)
@@ -207,7 +214,8 @@ case $FASE in
     echo ""
     echo "1) theHarvester (Docker Kali)"
     echo "2) whois+dig (local)"
-    read -p "Tool (1-2): " TOOL
+    echo -ne "Tool (1-2): "
+    read TOOL
     
     if [ "$TOOL" = "1" ]; then
         # Docker theHarvester con fix permissions
@@ -225,7 +233,8 @@ case $FASE in
 2)
     echo ""
     echo "1) nmap  2) dnsrecon  3) nikto"
-    read -p "Tool (1-3): " TOOL
+    echo -ne "Tool (1-3): "
+    read TOOL
     
     if [ "$TOOL" = "1" ]; then
         # IP Resolution
@@ -240,7 +249,8 @@ case $FASE in
         
         SCAN_TARGET="$TARGET"
         if [ -n "$RESOLVED_IP" ]; then
-            read -p "Scan [D]omain or [I]P? (default: Domain): " TARGET_CHOICE
+            echo -ne "Scan [D]omain or [I]P? (default: Domain): "
+            read TARGET_CHOICE
             if [[ "$TARGET_CHOICE" =~ ^[Ii]$ ]]; then
                 SCAN_TARGET="$RESOLVED_IP"
                 log_info "User selected to scan IP: $SCAN_TARGET"
@@ -249,9 +259,11 @@ case $FASE in
         
         echo -e "\n${YELLOW}Nmap Configuration:${NC}"
         echo -e "Default flags: ${CYAN}$NMAP_OPTIONS${NC}"
-        read -p "Use default flags? [Y/n]: " FLAG_CHOICE
+        echo -ne "Use default flags? [Y/n]: "
+        read FLAG_CHOICE
         if [[ "$FLAG_CHOICE" =~ ^[Nn]$ ]]; then
-            read -p "Enter custom flags (e.g. -p- -A -T4): " CUSTOM_FLAGS
+            echo -ne "Enter custom flags (e.g. -p- -A -T4): "
+            read CUSTOM_FLAGS
             if [ -n "$CUSTOM_FLAGS" ]; then
                 NMAP_OPTIONS="$CUSTOM_FLAGS"
             fi
@@ -286,8 +298,10 @@ case $FASE in
 3)
     echo ""
     echo "1) gospider  2) dirsearch  3) gobuster"
-    read -p "Tool (1-3): " TOOL
-    read -p "Depth ($GOSPIDER_DEPTH): " DEPTH; DEPTH=${DEPTH:-$GOSPIDER_DEPTH}
+    echo -ne "Tool (1-3): "
+    read TOOL
+    echo -ne "Depth ($GOSPIDER_DEPTH): "
+    read DEPTH; DEPTH=${DEPTH:-$GOSPIDER_DEPTH}
     
     if [ "$TOOL" = "1" ]; then
         log_info "Starting gospider crawling"
@@ -308,18 +322,21 @@ case $FASE in
     
     echo ""
     echo "1) Hydra SMTP  2) Hydra HTTP"
-    read -p "Tool (1-2): " TOOL
+    echo -ne "Tool (1-2): "
+    read TOOL
     
     PASSLIST="${DEFAULT_PASSLIST:-/usr/share/wordlists/rockyou.txt}"
     [ ! -f "$PASSLIST" ] && { echo -e "${RED}$PASSLIST mancante!${NC}"; exit 1; }
     
     if [ "$TOOL" = "1" ]; then
-        read -p "Mail server (smtp.$TARGET): " MAILSRV
+        echo -ne "Mail server (smtp.$TARGET): "
+        read MAILSRV
         MAILSRV=${MAILSRV:-"smtp.$TARGET"}
         log_info "Starting Hydra SMTP brute force"
         CMD="$PROXY hydra -L $EMAILLIST -P $PASSLIST $MAILSRV smtp -t $HYDRA_THREADS -o ${LOGDIR}/hydra_smtp.txt"
     elif [ "$TOOL" = "2" ]; then
-        read -p "Login path (/login): " LP
+        echo -ne "Login path (/login): "
+        read LP
         log_info "Starting Hydra HTTP brute force"
         CMD="$PROXY hydra -L $EMAILLIST -P $PASSLIST $TARGET http-post-form \"$LP:user=^USER^&pass=^PASS^:F=incorrect\" -o ${LOGDIR}/hydra_http.txt"
     else
@@ -370,7 +387,8 @@ case $FASE in
     echo "2) nuclei (vulnerability scan)"
     echo "3) sqlmap (SQL injection)"
     echo "4) ffuf (fuzzer)"
-    read -p "Tool (1-4): " TOOL
+    echo -ne "Tool (1-4): "
+    read TOOL
     
     if [ "$TOOL" = "1" ]; then
         if ! command -v subfinder &>/dev/null; then
@@ -387,7 +405,8 @@ case $FASE in
         log_info "Starting nuclei vulnerability scan"
         CMD="$PROXY nuclei -u https://$TARGET -o ${LOGDIR}/nuclei.txt"
     elif [ "$TOOL" = "3" ]; then
-        read -p "Target URL (https://$TARGET/page?id=1): " SQLURL
+        echo -ne "Target URL (https://$TARGET/page?id=1): "
+        read SQLURL
         SQLURL=${SQLURL:-"https://$TARGET"}
         log_info "Starting sqlmap SQL injection scan"
         CMD="$PROXY sqlmap -u \"$SQLURL\" --batch --output-dir=${LOGDIR}/sqlmap"

@@ -107,6 +107,7 @@ log_info "Proxy: $PROXY"
 
 # ===== PHASE MENU =====
 echo -e "${YELLOW}Seleziona FASE:${NC}"
+echo "0) Pre-Flight Check (Verify anonymity & tools)"
 echo "1) Recon (Docker-theHarvester/whois/dig)"
 echo "2) Scan (nmap/dnsrecon/nikto)"
 echo "3) Web Enum (gospider/dirsearch/gobuster)"
@@ -118,6 +119,31 @@ echo "8) Generate Report"
 read -p "> " FASE
 
 case $FASE in
+0)
+    log_info "Running pre-flight check"
+    
+    # Check if preflight script exists
+    if [ -f "$SCRIPT_DIR/lib/preflight-check.sh" ]; then
+        bash "$SCRIPT_DIR/lib/preflight-check.sh"
+    elif [ -f "/usr/local/bin/lib/preflight-check.sh" ]; then
+        bash "/usr/local/bin/lib/preflight-check.sh"
+    else
+        log_error "Pre-flight check script not found"
+        echo -e "${RED}Pre-flight check script not found!${NC}"
+        echo "Expected at: $SCRIPT_DIR/lib/preflight-check.sh"
+        exit 1
+    fi
+    
+    PREFLIGHT_EXIT=$?
+    if [ $PREFLIGHT_EXIT -eq 0 ]; then
+        log_success "Pre-flight check passed"
+    else
+        log_error "Pre-flight check failed"
+    fi
+    
+    finalize_logging
+    exit $PREFLIGHT_EXIT
+    ;;
 1)
     echo ""
     echo "1) theHarvester (Docker Kali)"

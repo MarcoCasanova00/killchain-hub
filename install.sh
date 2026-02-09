@@ -137,6 +137,13 @@ else
     echo -e "${YELLOW}lib directory non trovato, skip...${NC}"
 fi
 
+# Install status-check script
+if [ -f "status-check.sh" ]; then
+    cp status-check.sh /usr/local/bin/status-check
+    chmod +x /usr/local/bin/status-check
+    echo -e "${GREEN}✓ status-check installed${NC}"
+fi
+
 # Setup Tor config
 echo -e "${YELLOW}Configurazione Tor...${NC}"
 systemctl enable --now tor
@@ -171,6 +178,7 @@ echo "  Docker: theHarvester (via Kali container)"
 echo ""
 echo "Utilizzo:"
 echo "  anon-mode      # Switcha user anon"
+echo "  status-check   # Verifica anonimato e configurazione"
 echo "  killchain-hub  # Avvia framework"
 echo ""
-echo "Test: anon-mode && killchain-hub → Fase 5 (Evasion Test)"
+echo "Test: anon-mode && status-check && killchain-hub → Fase 0 (Pre-Flight)"

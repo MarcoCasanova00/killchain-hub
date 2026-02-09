@@ -17,6 +17,10 @@ fi
 echo -e "${YELLOW}Aggiornamento sistema...${NC}"
 apt update && apt upgrade -y
 
+# Remove legacy/conflicting docker package
+echo -e "${YELLOW}Rimozione pacchetti docker obsoleti/conflittuali...${NC}"
+apt purge -y docker docker-engine docker.io containerd runc 2>/dev/null || true
+
 # Install core dependencies
 echo -e "${YELLOW}Installazione dipendenze core...${NC}"
 apt install -y \

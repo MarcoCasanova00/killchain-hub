@@ -100,23 +100,43 @@ fi
 
 # Setup Docker
 echo -e "${YELLOW}Configurazione Docker...${NC}"
-systemctl enable --now docker
-usermod -aG docker $(logname 2>/dev/null || echo "$SUDO_USER")
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable --now docker
+else
+    echo -e "${YELLOW}Systemd non presente. Avvio manuale Docker richiesto (se non già attivo).${NC}"
+    if command -v service >/dev/null 2>&1; then
+        service docker start || echo -e "${RED}Impossibile avviare docker service${NC}"
+    fi
+fi
+
+# Add user to docker group if docker is installed
+if command -v docker >/dev/null 2>&1; then
+    usermod -aG docker $(logname 2>/dev/null || echo "$SUDO_USER")
+fi
 
 # Setup anon user
 echo -e "${YELLOW}Setup user anon...${NC}"
 useradd -m -s /bin/bash anon 2>/dev/null || true
-usermod -aG sudo anon
-usermod -aG docker anon
-echo "anon ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/anon
-chmod 440 /etc/sudoers.d/anon
+if command -v sudo >/dev/null 2>&1; then
+    usermod -aG sudo anon
+    echo "anon ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/anon
+    chmod 440 /etc/sudoers.d/anon
+fi
+# Add to docker group only if docker group exists
+if getent group docker >/dev/null 2>&1; then
+    usermod -aG docker anon
+fi
 
 # Setup anon-mode script
 cat > /usr/local/bin/anon-mode << 'EOF'
 #!/bin/bash
 # Switch to anon user
 if [ "$(whoami)" != "anon" ]; then
-    sudo -u anon -i
+    if command -v sudo >/dev/null 2>&1; then
+        sudo -u anon -i
+    else
+        su - anon
+    fi
 else
     echo "Già loggato come anon"
 fi
@@ -146,6 +166,7 @@ fi
 
 # Install default config
 if [ -f ".killchain-hub.conf" ]; then
+    mkdir -p /home/anon
     cp .killchain-hub.conf /home/anon/.killchain-hub.conf
     chown anon:anon /home/anon/.killchain-hub.conf
     chmod 644 /home/anon/.killchain-hub.conf
@@ -154,7 +175,14 @@ fi
 
 # Setup Tor config
 echo -e "${YELLOW}Configurazione Tor...${NC}"
-systemctl enable --now tor
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable --now tor
+elif command -v service >/dev/null 2>&1; then
+    service tor start || echo -e "${YELLOW}Tor service start failed via 'service' command.${NC}"
+else
+    echo -e "${YELLOW}Systemd/Service non trovati. Avvia Tor manualmente con 'tor &'.${NC}"
+fi
+
 cat > /etc/torsocks.conf << 'EOF'
 server = 127.0.0.1
 server_port = 9050

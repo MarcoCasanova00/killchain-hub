@@ -79,6 +79,7 @@ echo -e "A:   ${CYAN}anon@pentest-lab (virtual)${NC}"
 echo ""
 
 # Switch user with environment
+stty echo 2>/dev/null || true
 if command -v sudo >/dev/null 2>&1; then
     exec sudo -u anon -i
 else

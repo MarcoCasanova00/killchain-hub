@@ -187,6 +187,27 @@ if [ -f ".killchain-hub.conf" ]; then
     echo -e "${GREEN}✓ Config file installed to /home/anon/.killchain-hub.conf${NC}"
 fi
 
+# Setup anon .bashrc for better visibility/UX
+echo -e "${YELLOW}Configurazione .bashrc per anon...${NC}"
+cat > /home/anon/.bashrc << 'EOF'
+# ~/.bashrc: executed by bash(1) for non-login shells.
+export TERM=xterm-256color
+stty echo
+
+# Prompt settings
+export PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]anon@pentest-lab\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+
+# Aliases
+alias ll='ls -la'
+alias killchain-hub='/usr/local/bin/killchain-hub'
+alias status-check='/usr/local/bin/status-check'
+
+# Ensure PATH
+export PATH=$PATH:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+EOF
+chown anon:anon /home/anon/.bashrc
+chmod 644 /home/anon/.bashrc
+
 # Setup Tor config
 echo -e "${YELLOW}Configurazione Tor...${NC}"
 if command -v systemctl >/dev/null 2>&1; then

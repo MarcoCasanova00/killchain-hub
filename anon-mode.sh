@@ -39,6 +39,16 @@ if ! id "anon" >/dev/null 2>&1; then
     exit 1
 fi
 
+# Ensure anon is in docker group if docker is present
+if command -v docker >/dev/null 2>&1; then
+    if ! id -nG anon | grep -qw "docker"; then
+        echo -e "${YELLOW}⚠ Aggiunta 'anon' al gruppo docker...${NC}"
+        if [ "$(id -u)" -eq 0 ] || sudo -n true 2>/dev/null; then
+            sudo usermod -aG docker anon >/dev/null 2>&1 || true
+        fi
+    fi
+fi
+
 # Check sudo access for anon (if sudo is available)
 if command -v sudo >/dev/null 2>&1; then
     if ! sudo -l -U anon 2>/dev/null | grep -q "NOPASSWD"; then

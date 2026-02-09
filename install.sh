@@ -105,30 +105,40 @@ fi
 # Setup Docker
 echo -e "${YELLOW}Configurazione Docker...${NC}"
 if command -v systemctl >/dev/null 2>&1; then
-    systemctl enable --now docker
+    silent sudo systemctl enable --now docker
 else
     echo -e "${YELLOW}Systemd non presente. Avvio manuale Docker richiesto (se non già attivo).${NC}"
     if command -v service >/dev/null 2>&1; then
-        service docker start || echo -e "${RED}Impossibile avviare docker service${NC}"
+        silent sudo service docker start || echo -e "${RED}Impossibile avviare docker service${NC}"
     fi
 fi
 
-# Add user to docker group if docker is installed
+# Ensure docker group exists and add users
 if command -v docker >/dev/null 2>&1; then
-    usermod -aG docker $(logname 2>/dev/null || echo "$SUDO_USER")
+    # Create group if missing
+    if ! getent group docker >/dev/null; then
+        silent sudo groupadd docker
+    fi
+    
+    # Add Current User
+    CURRENT_SUDO_USER=$(logname 2>/dev/null || echo "$SUDO_USER")
+    if [ -n "$CURRENT_SUDO_USER" ]; then
+        silent sudo usermod -aG docker "$CURRENT_SUDO_USER"
+    fi
+    
+    # Add Anon User
+    if id "anon" >/dev/null 2>&1; then
+        silent sudo usermod -aG docker anon
+    fi
 fi
 
 # Setup anon user
 echo -e "${YELLOW}Setup user anon...${NC}"
-useradd -m -s /bin/bash anon 2>/dev/null || true
+silent sudo useradd -m -s /bin/bash anon 2>/dev/null || true
 if command -v sudo >/dev/null 2>&1; then
-    usermod -aG sudo anon
-    echo "anon ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/anon
-    chmod 440 /etc/sudoers.d/anon
-fi
-# Add to docker group only if docker group exists
-if getent group docker >/dev/null 2>&1; then
-    usermod -aG docker anon
+    silent sudo usermod -aG sudo anon
+    echo "anon ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/anon >/dev/null
+    silent sudo chmod 440 /etc/sudoers.d/anon
 fi
 
 # Setup anon-mode script

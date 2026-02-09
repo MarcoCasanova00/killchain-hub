@@ -228,8 +228,37 @@ case $FASE in
     read -p "Tool (1-3): " TOOL
     
     if [ "$TOOL" = "1" ]; then
-        log_info "Starting nmap scan"
-        CMD="$PROXY nmap $NMAP_OPTIONS -T$NMAP_TIMING $TARGET -oN ${LOGDIR}/nmap.txt"
+        # IP Resolution
+        RESOLVED_IP=$(dig +short "$TARGET" | head -n1)
+        if [ -z "$RESOLVED_IP" ]; then
+            RESOLVED_IP=$(getent hosts "$TARGET" | awk '{print $1}' | head -n1)
+        fi
+        
+        echo -e "\n${YELLOW}Target Resolution:${NC}"
+        echo -e "Domain: ${CYAN}$TARGET${NC}"
+        echo -e "IP:     ${CYAN}${RESOLVED_IP:-N/A}${NC}"
+        
+        SCAN_TARGET="$TARGET"
+        if [ -n "$RESOLVED_IP" ]; then
+            read -p "Scan [D]omain or [I]P? (default: Domain): " TARGET_CHOICE
+            if [[ "$TARGET_CHOICE" =~ ^[Ii]$ ]]; then
+                SCAN_TARGET="$RESOLVED_IP"
+                log_info "User selected to scan IP: $SCAN_TARGET"
+            fi
+        fi
+        
+        echo -e "\n${YELLOW}Nmap Configuration:${NC}"
+        echo -e "Default flags: ${CYAN}$NMAP_OPTIONS${NC}"
+        read -p "Use default flags? [Y/n]: " FLAG_CHOICE
+        if [[ "$FLAG_CHOICE" =~ ^[Nn]$ ]]; then
+            read -p "Enter custom flags (e.g. -p- -A -T4): " CUSTOM_FLAGS
+            if [ -n "$CUSTOM_FLAGS" ]; then
+                NMAP_OPTIONS="$CUSTOM_FLAGS"
+            fi
+        fi
+        
+        log_info "Starting nmap scan on $SCAN_TARGET with flags: $NMAP_OPTIONS"
+        CMD="$PROXY nmap $NMAP_OPTIONS -T$NMAP_TIMING $SCAN_TARGET -oN ${LOGDIR}/nmap.txt"
     elif [ "$TOOL" = "2" ]; then
         log_info "Starting DNS reconnaissance"
         CMD="$PROXY dnsrecon -d $TARGET -t brt -c ${LOGDIR}/dnsrecon.csv"

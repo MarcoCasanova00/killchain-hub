@@ -1,7 +1,18 @@
 #!/bin/bash
 # Killchain Hub v5.0 - Enhanced with Logging + Advanced Tools + Report Generation
+
+# Ensure we are running in bash
+if [ -z "$BASH_VERSION" ]; then
+    exec bash "$0" "$@"
+fi
+
 VERSION="5.0"
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,13 +60,13 @@ fi
 
 # ===== AUTO-DETECT PROXY =====
 # Check config preference first
-if [ -n "$PREFERRED_PROXY" ] && command -v "$PREFERRED_PROXY" &>/dev/null; then
+if [ -n "$PREFERRED_PROXY" ] && command -v "$PREFERRED_PROXY" >/dev/null 2>&1; then
     PROXY="$PREFERRED_PROXY"
-elif command -v torsocks &>/dev/null; then
+elif command -v torsocks >/dev/null 2>&1; then
     PROXY="torsocks"
-elif command -v proxychains4 &>/dev/null; then
+elif command -v proxychains4 >/dev/null 2>&1; then
     PROXY="proxychains4"
-elif command -v proxychains &>/dev/null; then
+elif command -v proxychains >/dev/null 2>&1; then
     PROXY="proxychains"
 else
     echo -e "${RED}ERRORE: Nessun proxy Tor installato!${NC}"
@@ -64,17 +75,42 @@ else
 fi
 
 # ===== DOCKER CHECK =====
-if ! command -v docker &>/dev/null; then
-    echo -e "${RED}Docker non installato!${NC}"
-    echo "Fix: sudo apt install -y docker.io && sudo usermod -aG docker anon"
-    exit 1
+# Try to find docker in common paths if not in PATH
+if ! command -v docker >/dev/null 2>&1; then
+    if [ -x "/usr/bin/docker" ]; then
+        export PATH=$PATH:/usr/bin
+    elif [ -x "/usr/local/bin/docker" ]; then
+        export PATH=$PATH:/usr/local/bin
+    else
+        echo -e "${RED}Docker non installato o non trovato nel PATH!${NC}"
+        echo "PATH attuale: $PATH"
+        echo "Fix: sudo apt install -y docker.io && sudo usermod -aG docker anon"
+        exit 1
+    fi
 fi
 
 # ===== TOR CHECK =====
-if ! sudo ss -tlnp 2>/dev/null | grep -q 9050; then
+# Robust check for Tor port
+if command -v ss >/dev/null 2>&1; then
+    if ! sudo ss -tlnp 2>/dev/null | grep -q 9050; then
+        TOR_MISSING=true
+    fi
+elif command -v netstat >/dev/null 2>&1; then
+    if ! sudo netstat -tlnp 2>/dev/null | grep -q 9050; then
+        TOR_MISSING=true
+    fi
+fi
+
+if [ "$TOR_MISSING" = "true" ]; then
     echo -e "${YELLOW}⚠ Tor non rilevato sulla porta 9050${NC}"
     echo "Avvio Tor..."
-    sudo systemctl start tor 2>/dev/null
+    if command -v systemctl >/dev/null 2>&1; then
+        sudo systemctl start tor >/dev/null 2>&1
+    elif command -v service >/dev/null 2>&1; then
+        sudo service tor start >/dev/null 2>&1
+    else
+        sudo tor & >/dev/null 2>&1
+    fi
     sleep 2
 fi
 

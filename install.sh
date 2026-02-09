@@ -188,11 +188,25 @@ if [ -f ".killchain-hub.conf" ]; then
 fi
 
 # Setup anon .bashrc for better visibility/UX
+# Ensure .profile sources .bashrc for login shells (sudo -i)
+echo -e "${YELLOW}Configurazione .profile per anon...${NC}"
+cat > /home/anon/.profile << 'EOF'
+# ~/.profile: executed by the command interpreter for login shells.
+if [ -n "$BASH_VERSION" ]; then
+    if [ -f "$HOME/.bashrc" ]; then
+        . "$HOME/.bashrc"
+    fi
+fi
+EOF
+chown anon:anon /home/anon/.profile
+chmod 644 /home/anon/.profile
+
+# Setup anon .bashrc for better visibility/UX
 echo -e "${YELLOW}Configurazione .bashrc per anon...${NC}"
 cat > /home/anon/.bashrc << 'EOF'
 # ~/.bashrc: executed by bash(1) for non-login shells.
 export TERM=xterm-256color
-stty echo
+stty echo 2>/dev/null
 
 # Prompt settings
 export PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]anon@pentest-lab\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '

@@ -79,10 +79,14 @@ echo -e "A:   ${CYAN}anon@pentest-lab (virtual)${NC}"
 echo ""
 
 # Switch user with environment
+# Switch user with environment
 stty echo 2>/dev/null || true
 if command -v sudo >/dev/null 2>&1; then
-    exec sudo -u anon -i
+    # Use "script" trick if available to force PTY, otherwise direct exec
+    # But often just "bash -l" is enough if .profile is correct.
+    # We force "stty echo" explicitly in the command to be sure.
+    exec sudo -u anon /bin/bash -l -c "stty echo; exec /bin/bash -l"
 else
     # Fallback to su if sudo is missing
-    exec su - anon
+    exec su - anon -c "stty echo; exec /bin/bash -l"
 fi

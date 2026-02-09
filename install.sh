@@ -144,6 +144,14 @@ if [ -f "status-check.sh" ]; then
     echo -e "${GREEN}✓ status-check installed${NC}"
 fi
 
+# Install default config
+if [ -f ".killchain-hub.conf" ]; then
+    cp .killchain-hub.conf /home/anon/.killchain-hub.conf
+    chown anon:anon /home/anon/.killchain-hub.conf
+    chmod 644 /home/anon/.killchain-hub.conf
+    echo -e "${GREEN}✓ Config file installed to /home/anon/.killchain-hub.conf${NC}"
+fi
+
 # Setup Tor config
 echo -e "${YELLOW}Configurazione Tor...${NC}"
 systemctl enable --now tor
@@ -162,6 +170,9 @@ chmod 755 /home/anon/killchain_logs
 if [ -f /usr/share/wordlists/rockyou.txt.gz ]; then
     gunzip -k /usr/share/wordlists/rockyou.txt.gz 2>/dev/null || true
 fi
+
+# Cleanup
+rm -f /tmp/gospider.zip 2>/dev/null
 
 # Update nuclei templates
 if command -v nuclei &>/dev/null; then

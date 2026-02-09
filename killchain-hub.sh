@@ -17,6 +17,26 @@ else
     exit 1
 fi
 
+# ===== CONFIGURATION =====
+# Load default config
+if [ -f "$HOME/.killchain-hub.conf" ]; then
+    source "$HOME/.killchain-hub.conf"
+elif [ -f "/home/anon/.killchain-hub.conf" ]; then
+    source "/home/anon/.killchain-hub.conf"
+else
+    # Fallback defaults if config missing
+    DEFAULT_WORDLIST="/usr/share/wordlists/dirb/common.txt"
+    DEFAULT_PASSLIST="/usr/share/wordlists/rockyou.txt"
+    GOBUSTER_THREADS=50
+    GOSPIDER_THREADS=50
+    GOSPIDER_DEPTH=10
+    FFUF_THREADS=40
+    HYDRA_THREADS=4
+    NMAP_TIMING=4
+    NMAP_OPTIONS="-sC -sV"
+    THEHARVESTER_LIMIT=500
+fi
+
 # ===== FORCE ANON USER CHECK =====
 CURRENT_USER=$(whoami)
 if [ "$CURRENT_USER" != "anon" ]; then
@@ -28,7 +48,10 @@ if [ "$CURRENT_USER" != "anon" ]; then
 fi
 
 # ===== AUTO-DETECT PROXY =====
-if command -v torsocks &>/dev/null; then
+# Check config preference first
+if [ -n "$PREFERRED_PROXY" ] && command -v "$PREFERRED_PROXY" &>/dev/null; then
+    PROXY="$PREFERRED_PROXY"
+elif command -v torsocks &>/dev/null; then
     PROXY="torsocks"
 elif command -v proxychains4 &>/dev/null; then
     PROXY="proxychains4"
@@ -77,7 +100,7 @@ echo "IP Tor: ${CYAN}$TOR_IP${NC}"
 echo "======================================================"
 
 # ===== LOG DIRECTORY SETUP =====
-LOGBASE="/home/anon/killchain_logs"
+LOGBASE="${LOG_BASE_DIR:-/home/anon/killchain_logs}"
 mkdir -p "$LOGBASE" 2>/dev/null || {
     echo -e "${RED}Errore: impossibile creare $LOGBASE${NC}"
     exit 1
@@ -90,8 +113,8 @@ read -p "Target dominio (es. esempio.it): " TARGET
 [ -z "$TARGET" ] && { echo -e "${RED}Target richiesto!${NC}"; exit 1; }
 
 read -p "Email list file (opz): " EMAILLIST
-read -p "Wordlist (/usr/share/wordlists/dirb/common.txt): " WORDLIST
-WORDLIST=${WORDLIST:-"/usr/share/wordlists/dirb/common.txt"}
+read -p "Wordlist ($DEFAULT_WORDLIST): " WORDLIST
+WORDLIST=${WORDLIST:-"$DEFAULT_WORDLIST"}
 
 # Create session log directory
 LOGDIR="$LOGBASE/${TARGET}_$(date +%Y%m%d_%H%M%S)"
@@ -153,7 +176,7 @@ case $FASE in
     if [ "$TOOL" = "1" ]; then
         # Docker theHarvester con fix permissions
         log_info "Starting theHarvester via Docker"
-        CMD="docker run --rm -u root -v $LOGBASE:/logs kalilinux/kali-rolling bash -lc 'apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l 500 -b all -f /tmp/harvester/${TARGET}_report && cp /tmp/harvester/${TARGET}_report.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_report.* 2>/dev/null; exit 0' && sudo chown -R anon:anon $LOGBASE"
+        CMD="docker run --rm -u root -v $LOGBASE:/logs kalilinux/kali-rolling bash -lc 'apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f /tmp/harvester/${TARGET}_report && cp /tmp/harvester/${TARGET}_report.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_report.* 2>/dev/null; exit 0' && sudo chown -R anon:anon $LOGBASE"
         
         echo -e "${BLUE}Info: Docker scarica Kali (~150MB cache prima volta)${NC}"
     elif [ "$TOOL" = "2" ]; then
@@ -170,7 +193,7 @@ case $FASE in
     
     if [ "$TOOL" = "1" ]; then
         log_info "Starting nmap scan"
-        CMD="$PROXY nmap -sC -sV -T4 $TARGET -oN ${LOGDIR}/nmap.txt"
+        CMD="$PROXY nmap $NMAP_OPTIONS -T$NMAP_TIMING $TARGET -oN ${LOGDIR}/nmap.txt"
     elif [ "$TOOL" = "2" ]; then
         log_info "Starting DNS reconnaissance"
         CMD="$PROXY dnsrecon -d $TARGET -t brt -c ${LOGDIR}/dnsrecon.csv"
@@ -185,17 +208,17 @@ case $FASE in
     echo ""
     echo "1) gospider  2) dirsearch  3) gobuster"
     read -p "Tool (1-3): " TOOL
-    read -p "Depth (10): " DEPTH; DEPTH=${DEPTH:-10}
+    read -p "Depth ($GOSPIDER_DEPTH): " DEPTH; DEPTH=${DEPTH:-$GOSPIDER_DEPTH}
     
     if [ "$TOOL" = "1" ]; then
         log_info "Starting gospider crawling"
-        CMD="$PROXY gospider -s https://$TARGET -d $DEPTH -t 50 -o ${LOGDIR}/gospider/"
+        CMD="$PROXY gospider -s https://$TARGET -d $DEPTH -t $GOSPIDER_THREADS -o ${LOGDIR}/gospider/"
     elif [ "$TOOL" = "2" ]; then
         log_info "Starting dirsearch enumeration"
         CMD="$PROXY dirsearch -u https://$TARGET -w $WORDLIST --random-agent -o ${LOGDIR}/dirsearch.txt"
     elif [ "$TOOL" = "3" ]; then
         log_info "Starting gobuster directory brute force"
-        CMD="$PROXY gobuster dir -u https://$TARGET -w $WORDLIST -t 50 -o ${LOGDIR}/gobuster.txt"
+        CMD="$PROXY gobuster dir -u https://$TARGET -w $WORDLIST -t $GOBUSTER_THREADS -o ${LOGDIR}/gobuster.txt"
     else
         echo -e "${RED}Tool invalido!${NC}"; exit 1
     fi
@@ -208,14 +231,14 @@ case $FASE in
     echo "1) Hydra SMTP  2) Hydra HTTP"
     read -p "Tool (1-2): " TOOL
     
-    PASSLIST="/usr/share/wordlists/rockyou.txt"
-    [ ! -f "$PASSLIST" ] && { echo -e "${RED}rockyou.txt mancante!${NC}"; exit 1; }
+    PASSLIST="${DEFAULT_PASSLIST:-/usr/share/wordlists/rockyou.txt}"
+    [ ! -f "$PASSLIST" ] && { echo -e "${RED}$PASSLIST mancante!${NC}"; exit 1; }
     
     if [ "$TOOL" = "1" ]; then
         read -p "Mail server (smtp.$TARGET): " MAILSRV
         MAILSRV=${MAILSRV:-"smtp.$TARGET"}
         log_info "Starting Hydra SMTP brute force"
-        CMD="$PROXY hydra -L $EMAILLIST -P $PASSLIST $MAILSRV smtp -t 4 -o ${LOGDIR}/hydra_smtp.txt"
+        CMD="$PROXY hydra -L $EMAILLIST -P $PASSLIST $MAILSRV smtp -t $HYDRA_THREADS -o ${LOGDIR}/hydra_smtp.txt"
     elif [ "$TOOL" = "2" ]; then
         read -p "Login path (/login): " LP
         log_info "Starting Hydra HTTP brute force"
@@ -249,19 +272,18 @@ case $FASE in
     echo -e "${YELLOW}[1/3] Recon via Docker Kali...${NC}\n"
     
     # Fase 1 - Docker theHarvester
-    log_command "theHarvester reconnaissance" "docker run --rm -u root -v $LOGBASE:/logs kalilinux/kali-rolling bash -lc \"apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l 500 -b bing,linkedin,google -f /tmp/harvester/${TARGET}_auto && cp /tmp/harvester/${TARGET}_auto.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_auto.* 2>/dev/null; exit 0\""
+    log_command "theHarvester reconnaissance" "docker run --rm -u root -v $LOGBASE:/logs kalilinux/kali-rolling bash -lc \"apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b bing,linkedin,google -f /tmp/harvester/${TARGET}_auto && cp /tmp/harvester/${TARGET}_auto.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_auto.* 2>/dev/null; exit 0\""
     
     sudo chown -R anon:anon $LOGBASE
     
     echo -e "\n${YELLOW}[2/3] Nmap scan...${NC}\n"
-    log_command "Nmap port scan" "$PROXY nmap -sC -sV -T4 $TARGET -oN ${LOGDIR}/nmap.txt"
+    log_command "Nmap port scan" "$PROXY nmap $NMAP_OPTIONS -T$NMAP_TIMING $TARGET -oN ${LOGDIR}/nmap.txt"
     
     echo -e "\n${YELLOW}[3/3] Web enumeration...${NC}\n"
     log_command "Dirsearch web enumeration" "$PROXY dirsearch -u https://$TARGET -w $WORDLIST --random-agent -o ${LOGDIR}/dirsearch.txt"
     
     log_success "Full auto scan completed"
-    finalize_logging
-    exit 0
+    CMD="echo 'Full Auto Mode Completed'"
     ;;
 7)
     echo ""
@@ -296,7 +318,7 @@ case $FASE in
             exit 1
         fi
         log_info "Starting ffuf fuzzing"
-        CMD="$PROXY ffuf -u https://$TARGET/FUZZ -w $WORDLIST -o ${LOGDIR}/ffuf.json -of json"
+        CMD="$PROXY ffuf -u https://$TARGET/FUZZ -w $WORDLIST -o ${LOGDIR}/ffuf.json -of json -t $FFUF_THREADS"
     else
         echo -e "${RED}Tool invalido!${NC}"; exit 1
     fi

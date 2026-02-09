@@ -256,6 +256,12 @@ case $FASE in
                 NMAP_OPTIONS="$CUSTOM_FLAGS"
             fi
         fi
+
+        # Force -sT (TCP Connect) if using proxy (SYN scan -sS fails with SIGABRT/134)
+        if [ -n "$PROXY" ] && [[ ! "$NMAP_OPTIONS" =~ "-sT" ]]; then
+            echo -e "${YELLOW}ℹ Proxy rilevato: forzo scan TCP Connect (-sT) per stabilità.${NC}"
+            NMAP_OPTIONS="-sT $NMAP_OPTIONS"
+        fi
         
         log_info "Starting nmap scan on $SCAN_TARGET with flags: $NMAP_OPTIONS"
         CMD="$PROXY nmap $NMAP_OPTIONS -T$NMAP_TIMING $SCAN_TARGET -oN ${LOGDIR}/nmap.txt"

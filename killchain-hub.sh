@@ -257,10 +257,18 @@ case $FASE in
             fi
         fi
 
-        # Force -sT (TCP Connect) if using proxy (SYN scan -sS fails with SIGABRT/134)
-        if [ -n "$PROXY" ] && [[ ! "$NMAP_OPTIONS" =~ "-sT" ]]; then
-            echo -e "${YELLOW}ℹ Proxy rilevato: forzo scan TCP Connect (-sT) per stabilità.${NC}"
-            NMAP_OPTIONS="-sT $NMAP_OPTIONS"
+        # Force safe flags for Proxy/Tor usage to avoid SIGABRT (134)
+        # -sT: Connect scan (required, no raw sockets)
+        # -Pn: No Ping (required, Tor drops ICMP)
+        # -n:  No DNS (required, prevents leaking/failures)
+        if [ -n "$PROXY" ]; then
+            FORCE_FLAGS="-sT -Pn -n"
+            echo -e "${YELLOW}ℹ Proxy rilevato: forzo flags di stabilità ($FORCE_FLAGS).${NC}"
+            
+            # Prepend flags if not present
+            [[ ! "$NMAP_OPTIONS" =~ "-sT" ]] && NMAP_OPTIONS="-sT $NMAP_OPTIONS"
+            [[ ! "$NMAP_OPTIONS" =~ "-Pn" ]] && NMAP_OPTIONS="-Pn $NMAP_OPTIONS"
+            [[ ! "$NMAP_OPTIONS" =~ "-n" ]] && NMAP_OPTIONS="-n $NMAP_OPTIONS"
         fi
         
         log_info "Starting nmap scan on $SCAN_TARGET with flags: $NMAP_OPTIONS"

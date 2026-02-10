@@ -248,9 +248,28 @@ case $FASE in
                 # Prebuilt image is expected to already have theHarvester installed
                 CMD="docker run --rm -u root -v $LOGBASE:/logs \"$THEHARVESTER_DOCKER_IMAGE\" bash -lc 'mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f /tmp/harvester/${TARGET}_report && cp /tmp/harvester/${TARGET}_report.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_report.* 2>/dev/null; exit 0' && sudo chown -R anon:anon $LOGBASE"
             else
-                # Default behaviour: install theHarvester inside Kali on each run
-                CMD="docker run --rm -u root -v $LOGBASE:/logs \"$THEHARVESTER_DOCKER_IMAGE\" bash -lc 'apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f /tmp/harvester/${TARGET}_report && cp /tmp/harvester/${TARGET}_report.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_report.* 2>/dev/null; exit 0' && sudo chown -R anon:anon $LOGBASE"
-                echo -e "${BLUE}Info: Docker scarica Kali (~150MB cache prima volta)${NC}"
+                # Default behaviour: try apt first, then fall back to GitHub (pip) inside Kali
+                CMD="docker run --rm -u root -v $LOGBASE:/logs \"$THEHARVESTER_DOCKER_IMAGE\" bash -lc '
+set -e
+if ! command -v theHarvester >/dev/null 2>&1; then
+  echo \"[theHarvester] Installing via apt inside container...\"
+  if ! (apt update -qq && apt install -yq theharvester); then
+    echo \"[theHarvester] apt install failed, trying GitHub (pip) fallback...\"
+    apt install -yq git python3-pip >/dev/null 2>&1 || true
+    pip3 install --no-cache-dir git+https://github.com/laramies/theHarvester.git || true
+  fi
+fi
+if ! command -v theHarvester >/dev/null 2>&1; then
+  echo \"[theHarvester] still not installed inside container, aborting.\"
+  exit 1
+fi
+mkdir -p /tmp/harvester
+theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f /tmp/harvester/${TARGET}_report
+cp /tmp/harvester/${TARGET}_report.* /logs/ 2>/dev/null || true
+chmod 666 /logs/${TARGET}_report.* 2>/dev/null || true
+exit 0
+' && sudo chown -R anon:anon $LOGBASE"
+                echo -e "${BLUE}Info: Docker scarica Kali (~150MB cache prima volta); if apt fails, it will try GitHub (pip) inside the container.${NC}"
             fi
         fi
     elif [ "$TOOL" = "2" ]; then
@@ -443,7 +462,26 @@ case $FASE in
          if [ "$THEHARVESTER_DOCKER_PREBUILT" = "true" ]; then
              log_command "theHarvester reconnaissance (Docker prebuilt image)" "docker run --rm -u root -v $LOGBASE:/logs \"$THEHARVESTER_DOCKER_IMAGE\" bash -lc \"mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b bing,linkedin,google -f /tmp/harvester/${TARGET}_auto && cp /tmp/harvester/${TARGET}_auto.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_auto.* 2>/dev/null; exit 0\""
          else
-             log_command "theHarvester reconnaissance (Docker Kali)" "docker run --rm -u root -v $LOGBASE:/logs \"$THEHARVESTER_DOCKER_IMAGE\" bash -lc \"apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b bing,linkedin,google -f /tmp/harvester/${TARGET}_auto && cp /tmp/harvester/${TARGET}_auto.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_auto.* 2>/dev/null; exit 0\""
+             log_command "theHarvester reconnaissance (Docker Kali)" "docker run --rm -u root -v $LOGBASE:/logs \"$THEHARVESTER_DOCKER_IMAGE\" bash -lc '
+set -e
+if ! command -v theHarvester >/dev/null 2>&1; then
+  echo \"[theHarvester] Installing via apt inside container...\"
+  if ! (apt update -qq && apt install -yq theharvester); then
+    echo \"[theHarvester] apt install failed, trying GitHub (pip) fallback...\"
+    apt install -yq git python3-pip >/dev/null 2>&1 || true
+    pip3 install --no-cache-dir git+https://github.com/laramies/theHarvester.git || true
+  fi
+fi
+if ! command -v theHarvester >/dev/null 2>&1; then
+  echo \"[theHarvester] still not installed inside container, aborting.\"
+  exit 1
+fi
+mkdir -p /tmp/harvester
+theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b bing,linkedin,google -f /tmp/harvester/${TARGET}_auto
+cp /tmp/harvester/${TARGET}_auto.* /logs/ 2>/dev/null || true
+chmod 666 /logs/${TARGET}_auto.* 2>/dev/null || true
+exit 0
+'"
          fi
          sudo chown -R anon:anon $LOGBASE
     fi

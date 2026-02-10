@@ -4,6 +4,15 @@
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
+# Signal handler for graceful exit
+cleanup() {
+    echo -e "\n${YELLOW}Evasion script interrupted. Some changes may have been applied.${NC}"
+    exit 130
+}
+
+# Trap Ctrl+C (SIGINT) and SIGTERM
+trap cleanup SIGINT SIGTERM
+
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
     echo -e "${RED}Please run as root (sudo) to apply evasion measures!${NC}"
@@ -14,13 +23,20 @@ echo -e "${CYAN}=== Enhanced Evasion Mode ===${NC}\n"
 
 # 1. MAC Address Randomization
 echo -e "${YELLOW}[1/10] MAC Address Randomization${NC}"
-if command -v macchanger &>/dev/null; then
+
+# Check if running in WSL
+if grep -qi microsoft /proc/version 2>/dev/null; then
+    echo -e "${YELLOW}⚠ WSL detected - MAC randomization not supported${NC}"
+elif command -v macchanger &>/dev/null; then
     INTERFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
     if [ -n "$INTERFACE" ]; then
-        ip link set "$INTERFACE" down
-        macchanger -r "$INTERFACE" 2>/dev/null
-        ip link set "$INTERFACE" up
-        echo -e "${GREEN}✓ MAC address randomized on $INTERFACE${NC}"
+        # Use timeout to prevent hanging
+        timeout 5 bash -c "
+            ip link set '$INTERFACE' down 2>/dev/null
+            macchanger -r '$INTERFACE' 2>/dev/null
+            ip link set '$INTERFACE' up 2>/dev/null
+        " && echo -e "${GREEN}✓ MAC address randomized on $INTERFACE${NC}" || \
+           echo -e "${YELLOW}⚠ MAC randomization failed or timed out (not critical)${NC}"
     else
         echo -e "${YELLOW}⚠ No network interface found${NC}"
     fi

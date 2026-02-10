@@ -218,11 +218,18 @@ case $FASE in
     read TOOL
     
     if [ "$TOOL" = "1" ]; then
-        # Docker theHarvester con fix permissions
-        log_info "Starting theHarvester via Docker"
-        CMD="docker run --rm -u root -v $LOGBASE:/logs kalilinux/kali-rolling bash -lc 'apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f /tmp/harvester/${TARGET}_report && cp /tmp/harvester/${TARGET}_report.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_report.* 2>/dev/null; exit 0' && sudo chown -R anon:anon $LOGBASE"
-        
-        echo -e "${BLUE}Info: Docker scarica Kali (~150MB cache prima volta)${NC}"
+        # Check for Native theHarvester (Arch/Manual install)
+        if command -v theHarvester &>/dev/null; then
+             log_info "Starting theHarvester (Native)"
+             CMD="theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f ${LOGDIR}/${TARGET}_report"
+             echo -e "${BLUE}Info: Using native theHarvester detected in PATH${NC}"
+        else
+            # Docker theHarvester con fix permissions
+            log_info "Starting theHarvester via Docker"
+            CMD="docker run --rm -u root -v $LOGBASE:/logs kalilinux/kali-rolling bash -lc 'apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f /tmp/harvester/${TARGET}_report && cp /tmp/harvester/${TARGET}_report.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_report.* 2>/dev/null; exit 0' && sudo chown -R anon:anon $LOGBASE"
+            
+            echo -e "${BLUE}Info: Docker scarica Kali (~150MB cache prima volta)${NC}"
+        fi
     elif [ "$TOOL" = "2" ]; then
         log_info "Starting whois and DNS enumeration"
         CMD="whois $TARGET > ${LOGDIR}/whois.txt && dig MX $TARGET +short > ${LOGDIR}/mx.txt && dig NS $TARGET +short > ${LOGDIR}/ns.txt && dig A $TARGET +short > ${LOGDIR}/a.txt"
@@ -382,10 +389,13 @@ case $FASE in
     echo -e "\n${BLUE}=== FULL AUTO MODE ===${NC}"
     echo -e "${YELLOW}[1/3] Recon via Docker Kali...${NC}\n"
     
-    # Fase 1 - Docker theHarvester
-    log_command "theHarvester reconnaissance" "docker run --rm -u root -v $LOGBASE:/logs kalilinux/kali-rolling bash -lc \"apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b bing,linkedin,google -f /tmp/harvester/${TARGET}_auto && cp /tmp/harvester/${TARGET}_auto.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_auto.* 2>/dev/null; exit 0\""
-    
-    sudo chown -R anon:anon $LOGBASE
+    # Fase 1 - Reconnaissance
+    if command -v theHarvester &>/dev/null; then
+         log_command "theHarvester reconnaissance (Native)" "theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b bing,linkedin,google -f ${LOGDIR}/${TARGET}_auto"
+    else
+         log_command "theHarvester reconnaissance (Docker)" "docker run --rm -u root -v $LOGBASE:/logs kalilinux/kali-rolling bash -lc \"apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b bing,linkedin,google -f /tmp/harvester/${TARGET}_auto && cp /tmp/harvester/${TARGET}_auto.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_auto.* 2>/dev/null; exit 0\""
+         sudo chown -R anon:anon $LOGBASE
+    fi
     
     echo -e "\n${YELLOW}[2/3] Nmap scan...${NC}\n"
     log_command "Nmap port scan" "$PROXY nmap $NMAP_OPTIONS -T$NMAP_TIMING $TARGET -oN ${LOGDIR}/nmap.txt"

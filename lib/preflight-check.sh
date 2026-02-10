@@ -318,6 +318,11 @@ else
         echo "  → Run: anon-mode"
     fi
     
+    # DNS fix - check if DNS_SERVER variable exists and is not 127.0.0.1
+    if [ -n "$DNS_SERVER" ] && [ "$DNS_SERVER" != "127.0.0.1" ]; then
+        echo "  → DNS Leak Detected! Run: killchain-hub → Option 5 → Option 2 (Apply Evasion)"
+    fi
+    
     # tor fix
     TOR_START="sudo tor &"
     if command -v systemctl >/dev/null 2>&1; then TOR_START="sudo systemctl start tor"

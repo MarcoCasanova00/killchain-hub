@@ -107,7 +107,6 @@ else
 fi
 
 # DNS Leak Test
-# DNS Leak Test
 DNS_SERVER=$(grep nameserver /etc/resolv.conf 2>/dev/null | head -n1 | awk '{print $2}')
 if [ "$DNS_SERVER" = "127.0.0.1" ]; then
     check_status "DNS Configuration" "PASS" "Routed through localhost (Tor)"
@@ -120,7 +119,7 @@ IPV6_DISABLE=$(sysctl net.ipv6.conf.all.disable_ipv6 2>/dev/null | awk '{print $
 if [ "$IPV6_DISABLE" = "1" ]; then
     check_status "IPv6 Status" "PASS" "Disabled (No IPv6 Leaks)"
 else
-    check_status "IPv6 Status" "WARN" "Enabled (Potential IPv6 Leak)"
+    check_status "IPv6 Status" "FAIL" "Enabled (IPv6 Leak Vector - Tor is IPv4 only!)"
 fi
 
 # Firewall Kill Switch Test

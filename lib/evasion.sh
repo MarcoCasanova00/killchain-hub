@@ -21,6 +21,9 @@ fi
 
 echo -e "${CYAN}=== Enhanced Evasion Mode ===${NC}\n"
 
+# Track what was applied for accurate summary
+MAC_STATUS="Skipped"
+
 # 1. MAC Address Randomization
 echo -e "${YELLOW}[1/10] MAC Address Randomization${NC}"
 
@@ -41,7 +44,7 @@ elif command -v macchanger &>/dev/null; then
             ip link set '$INTERFACE' down 2>/dev/null
             macchanger -r '$INTERFACE' 2>/dev/null
             ip link set '$INTERFACE' up 2>/dev/null
-        " && echo -e "${GREEN}✓ MAC address randomized on $INTERFACE${NC}" || \
+        " && { echo -e "${GREEN}✓ MAC address randomized on $INTERFACE${NC}"; MAC_STATUS="Randomized on $INTERFACE"; } || \
            echo -e "${YELLOW}⚠ MAC randomization failed or timed out (not critical)${NC}"
     else
         echo -e "${YELLOW}⚠ No network interface found${NC}"
@@ -67,7 +70,15 @@ echo -e "${GREEN}✓ Timezone set to: $RANDOM_TZ${NC}"
 echo -e "\n${YELLOW}[4/10] Disabling IPv6${NC}"
 sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1
 sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1
-echo -e "${GREEN}✓ IPv6 disabled system-wide${NC}"
+sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null 2>&1
+
+# Verify IPv6 is disabled
+IPV6_CHECK=$(sysctl net.ipv6.conf.all.disable_ipv6 2>/dev/null | awk '{print $3}')
+if [ "$IPV6_CHECK" = "1" ]; then
+    echo -e "${GREEN}✓ IPv6 disabled system-wide including loopback (leak prevention active)${NC}"
+else
+    echo -e "${YELLOW}⚠ IPv6 disable may have failed (verify manually)${NC}"
+fi
 
 # 5. DNS Configuration (Force Tor DNS)
 echo -e "\n${YELLOW}[5/10] Enforcing DNS over Tor${NC}"
@@ -94,16 +105,12 @@ echo -e "\n${YELLOW}[6/10] Configuring Firewall Kill Switch for 'anon'${NC}"
 if id "anon" &>/dev/null; then
     ANON_UID=$(id -u anon)
     
-    # clear previous rules related to anon in OUTPUT
-    # This is tricky without flushing everything. We'll just append ensuring they are at the top or managing a custom chain.
-    # For simplicity in this script, we'll try to remove then add, or just add.
+    # Remove any previous anon rules to prevent accumulation
+    while iptables -D OUTPUT -o lo -m owner --uid-owner "$ANON_UID" -j ACCEPT 2>/dev/null; do :; done
+    while iptables -D OUTPUT ! -o lo -m owner --uid-owner "$ANON_UID" -j REJECT --reject-with icmp-net-unreachable 2>/dev/null; do :; done
     
-    # Ensure blocking of non-Tor traffic for anon
-    # Allow traffic to loopback (Tor SOCKS/Control)
+    # Allow traffic to loopback (Tor SOCKS on 9050, DNS on 53)
     iptables -A OUTPUT -o lo -m owner --uid-owner "$ANON_UID" -j ACCEPT
-    
-    # Allow traffic to Tor TransPort/DNS (if transparent proxying used) or just SOCKS
-    # Tor usually listens on 127.0.0.1:9050 (SOCKS) and 53 (DNS if configured). Access to LO covers this.
     
     # REJECT everything else for anon
     iptables -A OUTPUT ! -o lo -m owner --uid-owner "$ANON_UID" -j REJECT --reject-with icmp-net-unreachable
@@ -146,7 +153,7 @@ fi
 echo -e "\n${YELLOW}[10/10] Verification${NC}"
 
 echo -e "\n${CYAN}=== Evasion Summary ===${NC}"
-echo "✓ MAC Address: Randomized"
+echo "✓ MAC Address: $MAC_STATUS"
 echo "✓ Hostname: $RANDOM_HOSTNAME"
 echo "✓ Timezone: $RANDOM_TZ"
 echo "✓ IPv6: Disabled"

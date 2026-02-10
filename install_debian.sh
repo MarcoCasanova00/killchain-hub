@@ -21,33 +21,45 @@ apt update && apt upgrade -y
 echo -e "${YELLOW}Rimozione pacchetti docker obsoleti/conflittuali...${NC}"
 apt purge -y docker docker-engine docker.io containerd runc 2>/dev/null || true
 
-# Install core dependencies
+# Install core dependencies (per-package to better handle errors/missing repos)
 echo -e "${YELLOW}Installazione dipendenze core...${NC}"
-apt install -y \
-    docker.io \
-    torsocks \
-    tor \
-    nmap \
-    hydra \
-    nikto \
-    dnsrecon \
-    git \
-    curl \
-    wget \
-    dnsutils \
-    netcat-openbsd \
-    python3 \
-    python3-pip \
-    python3-venv \
-    jq \
-    unzip \
-    wordlists \
-    golang-go \
-    build-essential \
-    macchanger \
-    net-tools \
-    p7zip-full \
+CORE_PACKAGES=(
+    docker.io
+    torsocks
+    tor
+    nmap
+    hydra
+    nikto
+    dnsrecon
+    git
+    curl
+    wget
+    dnsutils
+    netcat-openbsd
+    python3
+    python3-pip
+    python3-venv
+    jq
+    unzip
+    wordlists
+    golang-go
+    build-essential
+    macchanger
+    net-tools
+    p7zip-full
     libpcap-dev
+)
+
+for pkg in "${CORE_PACKAGES[@]}"; do
+    echo -e "${YELLOW}[*] Installing package: ${pkg}${NC}"
+    if ! apt install -y "$pkg"; then
+        echo -e "${RED}✗ Failed to install package: ${pkg}${NC}"
+        if [ "$pkg" = "nikto" ]; then
+            echo -e "${YELLOW}Hint:${NC} on some pure Debian setups 'nikto' may only be available in testing/offensive-security repos."
+            echo -e "      Consider enabling Debian 'testing' or a Kali-style security repo, or install nikto from source (GitHub) if you need it."
+        fi
+    fi
+done
 
 # Improved Go Installation
 GO_VERSION="1.21.6"

@@ -5,13 +5,13 @@
 ## 🚀 Caratteristiche
 
 ### Fasi di Attacco
-- **Fase 1 - Recon**: theHarvester (Docker Kali), whois, dig
+- **Fase 1 - Recon**: theHarvester (Docker Kali), whois, dig, amass, recon-ng, SpiderFoot
 - **Fase 2 - Scan**: nmap, dnsrecon, nikto via Tor
 - **Fase 3 - Web Enum**: gospider, dirsearch, gobuster
 - **Fase 4 - Brute**: Hydra SMTP/HTTP
 - **Fase 5 - Evasion**: Test IP Tor/anonimato
 - **Fase 6 - Auto**: Killchain completa automatizzata
-- **Fase 7 - Advanced**: subfinder, nuclei, sqlmap, ffuf
+- **Fase 7 - Advanced**: subfinder, nuclei, sqlmap, ffuf, workflow subfinder→nuclei
 - **Fase 8 - Report**: Generazione report HTML
 
 ### Funzionalità Avanzate
@@ -38,8 +38,11 @@
 # Core tools
 sudo apt install -y docker.io torsocks tor nmap gobuster hydra nikto dnsrecon
 
-# Advanced tools (installati automaticamente da install.sh)
+# Advanced tools (installati automaticamente o via Pre-Flight 0)
 # subfinder, nuclei, ffuf, amass, gospider
+
+# OSINT opzionale (a seconda della distro / repo):
+# spiderfoot, recon-ng
 ```
 
 ---
@@ -195,11 +198,14 @@ theHarvester gira in container Kali isolato:
 
 ## 🛠️ Tool Inclusi
 
-### Core Tools
+### Core & Recon Tools
 | Tool | Fase | Descrizione |
 |------|------|-------------|
-| **theHarvester** | 1 | Email/subdomain harvesting (Docker Kali) |
+| **theHarvester** | 1 | Email/subdomain harvesting (Docker Kali / Native) |
 | **whois/dig** | 1 | DNS enumeration |
+| **amass** | 1 / 7 | Subdomain enum / network mapping |
+| **recon-ng** | 1 | Interactive OSINT framework |
+| **SpiderFoot** | 1 | Web UI OSINT automation |
 | **nmap** | 2 | Port scanning |
 | **dnsrecon** | 2 | DNS reconnaissance |
 | **nikto** | 2 | Web server scanner |
@@ -215,6 +221,7 @@ theHarvester gira in container Kali isolato:
 | **nuclei** | Vulnerability scanner con template |
 | **sqlmap** | SQL injection automation |
 | **ffuf** | Fast web fuzzer |
+| **subfinder + nuclei** | Workflow chained: enum subdomains then scan them |
 
 ---
 

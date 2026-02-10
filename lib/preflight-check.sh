@@ -44,6 +44,82 @@ check_status() {
     fi
 }
 
+# Generic installer for missing tools (Debian/Ubuntu/Kali/Parrot + Arch/Manjaro)
+install_tool_generic() {
+    local tool="$1"
+
+    # Detect package manager
+    if command -v apt-get >/dev/null 2>&1; then
+        echo -e "${YELLOW}Attempting to install '$tool' via apt-get...${NC}"
+        if ! sudo apt-get install -y "$tool"; then
+            echo -e "${RED}apt-get failed to install '$tool'.${NC}"
+            # Give a better hint for common security tools that are only in some repos
+            if ! apt-cache show "$tool" >/dev/null 2>&1; then
+                echo -e "${YELLOW}Hint:${NC} package '${tool}' was not found in your enabled APT repositories."
+                echo -e "      On vanilla Debian you may need to enable 'testing' or a security repo (e.g. Kali) to install some tools (e.g. nikto, spiderfoot, recon-ng)."
+            fi
+            return 1
+        fi
+    elif command -v pacman >/dev/null 2>&1; then
+        echo -e "${YELLOW}Attempting to install '$tool' via pacman/yay...${NC}"
+        if command -v yay >/dev/null 2>&1; then
+            if ! yay -S --needed --noconfirm "$tool"; then
+                echo -e "${RED}yay failed to install '$tool'.${NC}"
+                return 1
+            fi
+        else
+            if ! sudo pacman -S --needed --noconfirm "$tool"; then
+                echo -e "${RED}pacman failed to install '$tool'.${NC}"
+                return 1
+            fi
+        fi
+    else
+        echo -e "${RED}No supported package manager (apt/pacman) found for automatic install of '$tool'.${NC}"
+        return 1
+    fi
+
+    # Final verification
+    if command -v "$tool" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ '$tool' installed and available in PATH.${NC}"
+        return 0
+    else
+        echo -e "${RED}Install command completed but '$tool' is still not in PATH.${NC}"
+        return 1
+    fi
+}
+
+# Wrapper that prompts the user and calls the generic installer
+handle_missing_tool() {
+    local tool="$1"
+    local required_level="$2"  # "required" or "optional"
+
+    local status_label="FAIL"
+    local requirement_text="Required"
+    if [ "$required_level" = "optional" ]; then
+        status_label="WARN"
+        requirement_text="Optional"
+    fi
+
+    echo -e "${YELLOW}$requirement_text tool '$tool' is not installed.${NC}"
+    echo -ne "  → Attempt to install it now? [y/N]: "
+    read ANSWER
+
+    if [[ ! "$ANSWER" =~ ^[Yy]$ ]]; then
+        check_status "$tool" "$status_label" "Not installed (user skipped auto-install)"
+        return
+    fi
+
+    if install_tool_generic "$tool"; then
+        check_status "$tool" "PASS" "$(command -v $tool)"
+    else
+        local msg="Automatic installation failed"
+        if [ "$tool" = "nikto" ]; then
+            msg="$msg (on Debian you may need to enable 'testing' or a security repo for nikto)."
+        fi
+        check_status "$tool" "$status_label" "$msg"
+    fi
+}
+
 echo -e "${BLUE}[1] USER & ENVIRONMENT${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
@@ -172,17 +248,17 @@ for tool in "${TOOLS[@]}"; do
     if command -v "$tool" &>/dev/null; then
         check_status "$tool" "PASS" "$(command -v $tool)"
     else
-        check_status "$tool" "FAIL" "Not installed"
+        handle_missing_tool "$tool" "required"
     fi
 done
 
-# Advanced tools
-ADV_TOOLS=("subfinder" "nuclei" "ffuf" "dirsearch")
+# Advanced tools (Recon & Web)
+ADV_TOOLS=("subfinder" "nuclei" "ffuf" "dirsearch" "amass" "spiderfoot" "recon-ng")
 for tool in "${ADV_TOOLS[@]}"; do
     if command -v "$tool" &>/dev/null; then
         check_status "$tool" "PASS" "$(command -v $tool)"
     else
-        check_status "$tool" "WARN" "Not installed (optional)"
+        handle_missing_tool "$tool" "optional"
     fi
 done
 

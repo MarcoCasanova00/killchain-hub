@@ -212,9 +212,12 @@ case $FASE in
     ;;
 1)
     echo ""
-    echo "1) theHarvester (Docker Kali)"
+    echo "1) theHarvester (Docker Kali / Native)"
     echo "2) whois+dig (local)"
-    echo -ne "Tool (1-2): "
+    echo "3) amass (subdomain/attack surface recon)"
+    echo "4) recon-ng (interactive OSINT framework)"
+    echo "5) SpiderFoot (web UI OSINT)"
+    echo -ne "Tool (1-5): "
     read TOOL
     
     if [ "$TOOL" = "1" ]; then
@@ -233,6 +236,30 @@ case $FASE in
     elif [ "$TOOL" = "2" ]; then
         log_info "Starting whois and DNS enumeration"
         CMD="whois $TARGET > ${LOGDIR}/whois.txt && dig MX $TARGET +short > ${LOGDIR}/mx.txt && dig NS $TARGET +short > ${LOGDIR}/ns.txt && dig A $TARGET +short > ${LOGDIR}/a.txt"
+    elif [ "$TOOL" = "3" ]; then
+        if ! command -v amass &>/dev/null; then
+            log_error "amass not installed. Run Pre-Flight (0) and install it or rerun the system installer."
+            echo -e "${RED}amass non installato!${NC}"
+            exit 1
+        fi
+        log_info "Starting amass reconnaissance"
+        CMD="$PROXY amass enum -d $TARGET -o ${LOGDIR}/amass.txt"
+    elif [ "$TOOL" = "4" ]; then
+        if ! command -v recon-ng &>/dev/null; then
+            log_error "recon-ng not installed. Run Pre-Flight (0) and install it or use your package manager."
+            echo -e "${RED}recon-ng non installato!${NC}"
+            exit 1
+        fi
+        log_info "Launching recon-ng interactive console"
+        CMD="$PROXY recon-ng"
+    elif [ "$TOOL" = "5" ]; then
+        if ! command -v spiderfoot &>/dev/null; then
+            log_error "SpiderFoot not installed. Run Pre-Flight (0) and install it or use your package manager."
+            echo -e "${RED}SpiderFoot non installato!${NC}"
+            exit 1
+        fi
+        log_info "Starting SpiderFoot web UI on 127.0.0.1:5001"
+        CMD="$PROXY spiderfoot -l 127.0.0.1:5001 & echo 'SpiderFoot listening on http://127.0.0.1:5001 (CTRL+C to stop in that terminal)'"
     else
         echo -e "${RED}Tool invalido!${NC}"; exit 1
     fi
@@ -412,7 +439,8 @@ case $FASE in
     echo "2) nuclei (vulnerability scan)"
     echo "3) sqlmap (SQL injection)"
     echo "4) ffuf (fuzzer)"
-    echo -ne "Tool (1-4): "
+    echo "5) subfinder + nuclei (enum → vuln scan)"
+    echo -ne "Tool (1-5): "
     read TOOL
     
     if [ "$TOOL" = "1" ]; then
@@ -442,6 +470,20 @@ case $FASE in
         fi
         log_info "Starting ffuf fuzzing"
         CMD="$PROXY ffuf -u https://$TARGET/FUZZ -w $WORDLIST -o ${LOGDIR}/ffuf.json -of json -t $FFUF_THREADS"
+    elif [ "$TOOL" = "5" ]; then
+        # Chain: subfinder → nuclei over discovered subdomains
+        if ! command -v subfinder &>/dev/null; then
+            log_error "subfinder not installed. Run Pre-Flight (0) and install it or use your package manager."
+            echo -e "${RED}subfinder non installato!${NC}"
+            exit 1
+        fi
+        if ! command -v nuclei &>/dev/null; then
+            log_error "nuclei not installed. Run Pre-Flight (0) and install it or use your package manager."
+            echo -e "${RED}nuclei non installato!${NC}"
+            exit 1
+        fi
+        log_info "Starting chained subfinder + nuclei workflow"
+        CMD="$PROXY subfinder -d $TARGET -silent -o ${LOGDIR}/subfinder.txt && $PROXY nuclei -l ${LOGDIR}/subfinder.txt -o ${LOGDIR}/nuclei_from_subfinder.txt"
     else
         echo -e "${RED}Tool invalido!${NC}"; exit 1
     fi

@@ -11,6 +11,11 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
 echo "=== Killchain Hub Installer v5.0 ==="
 
+# Helper function for silent command execution
+silent() {
+    "$@" >/dev/null 2>&1
+}
+
 # Check root
 if [ "$EUID" -ne 0 ]; then 
     echo -e "${RED}Esegui come root: sudo ./install.sh${NC}"

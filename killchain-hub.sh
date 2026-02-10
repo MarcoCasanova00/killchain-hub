@@ -404,6 +404,7 @@ echo "6) Full Auto (Recon Docker → Scan → Web)"
 echo "7) Advanced Tools (subfinder/nuclei/sqlmap/ffuf)"
 echo "8) Generate Report"
 echo "9) Guided Info Gathering Wizard"
+echo "10) Assessment Wizard (Passive → Active → Vuln → Exploit helper)"
 echo -ne "> "
 read FASE
 
@@ -444,11 +445,25 @@ case $FASE in
     read TOOL
     
     if [ "$TOOL" = "1" ]; then
-        # Check for Native theHarvester (Arch/Manual install)
+        # Prioritize native theHarvester on Kali and other systems
         if command -v theHarvester &>/dev/null; then
              log_info "Starting theHarvester (Native)"
              CMD="theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f ${LOGDIR}/${TARGET}_report"
-             echo -e "${BLUE}Info: Using native theHarvester detected in PATH${NC}"
+             echo -e "${GREEN}✓ Using native theHarvester (no Docker needed)${NC}"
+        elif [ -f /etc/os-release ] && grep -q "kali" /etc/os-release; then
+            # Kali-specific fallback: install theHarvester if missing
+            echo -e "${YELLOW}theHarvester not found on Kali. Installing...${NC}"
+            if command -v sudo >/dev/null 2>&1; then
+                sudo apt update -qq && sudo apt install -y theharvester 2>/dev/null || true
+            fi
+            if command -v theHarvester &>/dev/null; then
+                log_info "Starting theHarvester (Native - Kali installed)"
+                CMD="theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f ${LOGDIR}/${TARGET}_report"
+                echo -e "${GREEN}✓ Using native theHarvester (installed on Kali)${NC}"
+            else
+                echo -e "${RED}Failed to install theHarvester on Kali. Please install manually.${NC}"
+                return 1
+            fi
         else
             # Docker theHarvester with optional prebuilt image
             log_info "Starting theHarvester via Docker (image: $THEHARVESTER_DOCKER_IMAGE, prebuilt=$THEHARVESTER_DOCKER_PREBUILT)"

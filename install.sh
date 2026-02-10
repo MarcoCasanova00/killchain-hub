@@ -22,8 +22,18 @@ if [[ "$OS" == *"Arch"* ]] || [[ "$OS" == *"Manjaro"* ]]; then
     echo -e "${YELLOW}Arch Linux detected. Switching to native Arch installer (pacman/yay)...${NC}"
     chmod +x install_arch.sh
     ./install_arch.sh
-elif [[ "$OS" == *"Debian"* ]] || [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Kali"* ]] || [[ "$OS" == *"Parrot"* ]]; then
-    echo -e "${YELLOW}Debian/Kali/Ubuntu detected. Switching to apt installer...${NC}"
+elif [[ "$OS" == *"Kali"* ]]; then
+    echo -e "${YELLOW}Kali Linux detected. Using optimized Kali installer (native tools, no Docker)...${NC}"
+    chmod +x install_kali.sh
+    # install_kali.sh expects to be run with sudo
+    if [ "$EUID" -ne 0 ]; then
+        echo -e "${RED}Running Kali installer requires root. Requesting sudo...${NC}"
+        sudo ./install_kali.sh
+    else
+        ./install_kali.sh
+    fi
+elif [[ "$OS" == *"Debian"* ]] || [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Parrot"* ]]; then
+    echo -e "${YELLOW}Debian/Ubuntu/Parrot detected. Switching to apt installer...${NC}"
     chmod +x install_debian.sh
     # install_debian.sh expects to be run with sudo
     if [ "$EUID" -ne 0 ]; then
@@ -35,16 +45,24 @@ elif [[ "$OS" == *"Debian"* ]] || [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Kal
 else
     echo -e "${RED}OS not automatically recognized or supported for auto-install.${NC}"
     echo "Please choose manually:"
-    echo "1) Debian/Kali/Ubuntu (apt)"
-    echo "2) Arch Linux (pacman/yay)"
-    echo -ne "Select (1-2): "
+    echo "1) Kali Linux (optimized, native tools)"
+    echo "2) Debian/Ubuntu/Parrot (apt with Docker)"
+    echo "3) Arch Linux (pacman/yay)"
+    echo "4) Portable (minimal, binary releases)"
+    echo -ne "Select (1-4): "
     read CHOICE
     if [ "$CHOICE" == "1" ]; then
+        chmod +x install_kali.sh
+        sudo ./install_kali.sh
+    elif [ "$CHOICE" == "2" ]; then
         chmod +x install_debian.sh
         sudo ./install_debian.sh
-    elif [ "$CHOICE" == "2" ]; then
+    elif [ "$CHOICE" == "3" ]; then
         chmod +x install_arch.sh
         ./install_arch.sh
+    elif [ "$CHOICE" == "4" ]; then
+        chmod +x install_portable.sh
+        ./install_portable.sh
     else
         echo "Invalid choice. Exiting."
         exit 1

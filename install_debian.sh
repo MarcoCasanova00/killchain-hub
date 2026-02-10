@@ -1,6 +1,10 @@
 #!/bin/bash
 # Installazione Killchain Hub v5.0
 
+if [ -z "$BASH_VERSION" ]; then
+    exec bash "$0" "$@"
+fi
+
 set -e
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'

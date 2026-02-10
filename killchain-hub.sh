@@ -57,6 +57,214 @@ THEHARVESTER_DOCKER_IMAGE="${THEHARVESTER_DOCKER_IMAGE:-kalilinux/kali-rolling}"
 # If set to "true", assume image already has theHarvester installed and skip apt each run
 THEHARVESTER_DOCKER_PREBUILT="${THEHARVESTER_DOCKER_PREBUILT:-false}"
 
+# ===== GO / TOOL INSTALL HELPERS (Wizard runtime) =====
+
+# Ensure Go toolchain is available for anon (used to install Go-based tools on the fly)
+ensure_go_runtime() {
+    if command -v go >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo -e "${YELLOW}Go (golang-go) non trovato. Alcuni tool (subfinder, puredns, dnsx, ecc.) richiedono Go.${NC}"
+    echo -ne "Installare Go e dipendenze base ora tramite apt? [Y/n]: "
+    read GO_ANSWER
+    if [[ ! "$GO_ANSWER" =~ ^[Yy]$ ]]; then
+        log_info "User skipped Go installation"
+        return 1
+    fi
+
+    log_info "Installing Go toolchain via apt (golang-go, git, build-essential)"
+    if sudo apt update && sudo apt install -y golang-go git build-essential; then
+        # Ensure ~/go/bin is on PATH for current session and future shells
+        if ! echo "$PATH" | grep -q "$HOME/go/bin"; then
+            echo 'export PATH=$PATH:$HOME/go/bin' >> "$HOME/.bashrc"
+            export PATH="$PATH:$HOME/go/bin"
+        fi
+        log_success "Go toolchain installed successfully"
+        return 0
+    else
+        log_error "Failed to install Go via apt"
+        return 1
+    fi
+}
+
+# Install a Go-based tool for the current user using "go install"
+install_go_tool_runtime() {
+    local tool="$1"
+    local install_cmd=""
+
+    case "$tool" in
+        subfinder)
+            install_cmd="go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest"
+            ;;
+        puredns)
+            install_cmd="go install github.com/d3mondev/puredns/v2@latest"
+            ;;
+        dnsx)
+            install_cmd="go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@latest"
+            ;;
+        alterx)
+            install_cmd="go install -v github.com/projectdiscovery/alterx/cmd/alterx@latest"
+            ;;
+        httpx)
+            install_cmd="go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest"
+            ;;
+        nuclei)
+            install_cmd="go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest"
+            ;;
+        trufflehog)
+            install_cmd="go install github.com/trufflesecurity/trufflehog/v3@latest"
+            ;;
+        *)
+            log_error "No Go install recipe defined for tool: $tool"
+            return 1
+            ;;
+    esac
+
+    if ! ensure_go_runtime; then
+        return 1
+    fi
+
+    log_info "Installing $tool via Go: $install_cmd"
+    # Filter out noisy "go: downloading" lines for cleaner UX
+    eval "$install_cmd" 2>&1 | grep -v "go: downloading" || true
+
+    # Ensure ~/go/bin is in PATH for this session
+    if ! echo "$PATH" | grep -q "$HOME/go/bin"; then
+        export PATH="$PATH:$HOME/go/bin"
+    fi
+
+    if command -v "$tool" >/dev/null 2>&1; then
+        log_success "$tool installed successfully via Go"
+        return 0
+    else
+        log_error "Go install command completed but '$tool' not found in PATH"
+        return 1
+    fi
+}
+
+# Install jq via apt when needed (used for crt.sh parsing)
+install_jq_if_needed() {
+    if command -v jq >/dev/null 2>&1; then
+        return 0
+    fi
+    echo -e "${YELLOW}jq non trovato (richiesto per parsing JSON da crt.sh).${NC}"
+    echo -ne "Installare jq ora tramite apt? [Y/n]: "
+    read JQ_ANSWER
+    if [[ ! "$JQ_ANSWER" =~ ^[Yy]$ ]]; then
+        log_info "User skipped jq installation"
+        return 1
+    fi
+    log_info "Installing jq via apt"
+    if sudo apt update && sudo apt install -y jq; then
+        log_success "jq installed successfully"
+        return 0
+    else
+        log_error "Failed to install jq via apt"
+        return 1
+    fi
+}
+
+# Install cloud_enum from GitHub (optional, uses sudo for wrapper in /usr/local/bin)
+install_cloud_enum_runtime() {
+    if command -v cloud_enum >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo -e "${YELLOW}cloud_enum non trovato.${NC}"
+    echo -ne "Installare cloud_enum (git clone + pip) ora? [Y/n]: "
+    read CE_ANSWER
+    if [[ ! "$CE_ANSWER" =~ ^[Yy]$ ]]; then
+        log_info "User skipped cloud_enum installation"
+        return 1
+    fi
+
+    log_info "Installing cloud_enum from GitHub (initstring/cloud_enum)"
+    if ! command -v git >/dev/null 2>&1 || ! command -v pip3 >/dev/null 2>&1; then
+        log_info "Ensuring git and python3-pip are installed via apt"
+        sudo apt update && sudo apt install -y git python3-pip || {
+            log_error "Failed to install git/python3-pip for cloud_enum"
+            return 1
+        }
+    fi
+
+    local CE_DIR="$HOME/cloud_enum"
+    rm -rf "$CE_DIR"
+    if ! git clone --quiet https://github.com/initstring/cloud_enum.git "$CE_DIR"; then
+        log_error "git clone for cloud_enum failed"
+        return 1
+    fi
+
+    if ! pip3 install --user -r "$CE_DIR/requirements.txt"; then
+        log_error "pip install requirements for cloud_enum failed"
+        return 1
+    fi
+
+    # Create a small wrapper so "cloud_enum" is in PATH
+    local WRAP="/usr/local/bin/cloud_enum"
+    echo '#!/bin/bash' | sudo tee "$WRAP" >/dev/null
+    echo "python3 \"$CE_DIR/cloud_enum.py\" \"\$@\"" | sudo tee -a "$WRAP" >/dev/null
+    sudo chmod +x "$WRAP"
+
+    if command -v cloud_enum >/dev/null 2>&1; then
+        log_success "cloud_enum installed successfully"
+        return 0
+    else
+        log_error "cloud_enum wrapper created but not found in PATH"
+        return 1
+    fi
+}
+
+# Generic checker used by the wizard steps
+check_and_install_tool() {
+    local tool="$1"      # binary name to check
+    local method="$2"    # "go", "jq-apt", "cloud_enum", or "none"
+
+    if command -v "$tool" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo -e "${YELLOW}Tool '$tool' non trovato nel PATH.${NC}"
+    echo -ne "Installare '$tool' ora? [Y/n]: "
+    read TOOL_ANSWER
+    if [[ ! "$TOOL_ANSWER" =~ ^[Yy]$ ]]; then
+        log_info "User skipped installation of $tool"
+        return 1
+    fi
+
+    local ok=1
+    case "$method" in
+        go)
+            install_go_tool_runtime "$tool" && ok=0
+            ;;
+        jq-apt)
+            install_jq_if_needed && ok=0
+            ;;
+        cloud_enum)
+            install_cloud_enum_runtime && ok=0
+            ;;
+        *)
+            log_error "No install method defined for tool: $tool"
+            ok=1
+            ;;
+    esac
+
+    if [ $ok -ne 0 ]; then
+        echo -ne "${RED}Installazione di '$tool' fallita. Continuare comunque? [y/N]: ${NC}"
+        read CONTINUE_ANSWER
+        if [[ "$CONTINUE_ANSWER" =~ ^[Yy]$ ]]; then
+            log_error "Continuing without $tool at user request"
+            return 1
+        else
+            log_error "Aborting due to missing tool: $tool"
+            finalize_logging
+            exit 1
+        fi
+    fi
+
+    return 0
+}
+
 # ===== FORCE ANON USER CHECK =====
 CURRENT_USER=$(whoami)
 if [ "$CURRENT_USER" != "anon" ]; then
@@ -690,13 +898,15 @@ EOF
     # STEP 3: Passive subdomain enumeration (subfinder)
     echo -e "\n${BLUE}[3/6] Passive Subdomain Enumeration (subfinder)${NC}"
     SUBF_FILE="${LOGDIR}/subfinder.txt"
+    # Try to ensure subfinder is available via Go installer
+    check_and_install_tool "subfinder" "go" || true
     if command -v subfinder >/dev/null 2>&1; then
         echo -e "${YELLOW}Running subfinder...${NC}"
         $PROXY subfinder -d "$TARGET" -silent -o "$SUBF_FILE" 2>/dev/null || true
         echo -e "subfinder output saved to: ${YELLOW}$SUBF_FILE${NC}"
     else
         echo -e "${RED}subfinder non installato.${NC}"
-        echo "You can install it via installer / Pre-Flight (0) and run manually:"
+        echo "You can install it via installer / Pre-Flight (0) or rerun this wizard and run manually:"
         echo "  subfinder -d $TARGET -silent -o $SUBF_FILE"
     fi
 
@@ -706,6 +916,11 @@ EOF
     # STEP 4: Active DNS brute & permutations (puredns / alterx / dnsx)
     echo -e "\n${BLUE}[4/6] Active DNS brute & permutations${NC}"
     echo -e "${YELLOW}This step is optional and depends on extra tools (puredns, alterx, dnsx).${NC}\n"
+
+    # Try to ensure Go-based DNS tools are available
+    check_and_install_tool "puredns" "go" || true
+    check_and_install_tool "alterx" "go" || true
+    check_and_install_tool "dnsx" "go" || true
 
     if command -v puredns >/dev/null 2>&1; then
         echo "Example puredns command:"
@@ -731,6 +946,8 @@ EOF
     # STEP 5: crt.sh certificate enumeration
     echo -e "\n${BLUE}[5/6] Certificate-based subdomains (crt.sh)${NC}"
     CRT_FILE="${LOGDIR}/crtsh_${TARGET}.json"
+    # Ensure jq is available if possible
+    install_jq_if_needed || true
     if command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
         echo -e "${YELLOW}Querying crt.sh and saving raw JSON to:${NC} ${YELLOW}$CRT_FILE${NC}"
         curl -s "https://crt.sh/?q=${TARGET}&output=json" > "$CRT_FILE" 2>/dev/null || echo -e "${YELLOW}crt.sh request failed or returned no data.${NC}"
@@ -750,6 +967,8 @@ EOF
     echo -e "\n${BLUE}[6/6] Cloud buckets, secrets & favicon hunting${NC}"
 
     echo -e "\n${CYAN}Cloud storage discovery (grayhatwarfare / cloud_enum):${NC}"
+    # Try to install cloud_enum if missing
+    check_and_install_tool "cloud_enum" "cloud_enum" || true
     if command -v cloud_enum >/dev/null 2>&1; then
         echo "Example cloud_enum usage:"
         echo "  cloud_enum -k \"${TARGET}\" -o ${LOGDIR}/cloud_enum_${TARGET}.txt"
@@ -759,6 +978,8 @@ EOF
     fi
 
     echo -e "\n${CYAN}Secrets in repositories (GitHub dorks / TruffleHog):${NC}"
+    # Ensure trufflehog is available via Go installer if possible
+    check_and_install_tool "trufflehog" "go" || true
     if command -v trufflehog >/dev/null 2>&1; then
         echo "Example TruffleHog usage (after git clone /tmp/repo):"
         echo "  trufflehog --regex --entropy=False /tmp/repo"

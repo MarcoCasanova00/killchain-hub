@@ -24,8 +24,14 @@ echo -e "${CYAN}=== Enhanced Evasion Mode ===${NC}\n"
 # 1. MAC Address Randomization
 echo -e "${YELLOW}[1/10] MAC Address Randomization${NC}"
 
-# Check if running in WSL
-if grep -qi microsoft /proc/version 2>/dev/null; then
+# Ask user about environment
+echo -ne "Are you running on WSL/Cloud/VM/VPS? (y/n): "
+read -r ENV_VIRTUAL
+
+if [[ "$ENV_VIRTUAL" =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}⚠ Virtualized environment - Skipping MAC randomization (not supported)${NC}"
+elif grep -qi microsoft /proc/version 2>/dev/null; then
+    # WSL auto-detection as fallback
     echo -e "${YELLOW}⚠ WSL detected - MAC randomization not supported${NC}"
 elif command -v macchanger &>/dev/null; then
     INTERFACE=$(ip route | grep default | awk '{print $5}' | head -n1)

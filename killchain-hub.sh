@@ -51,6 +51,12 @@ else
     THEHARVESTER_LIMIT=500
 fi
 
+# Defaults for Docker-based theHarvester
+# Can be overridden in ~/.killchain-hub.conf
+THEHARVESTER_DOCKER_IMAGE="${THEHARVESTER_DOCKER_IMAGE:-kalilinux/kali-rolling}"
+# If set to "true", assume image already has theHarvester installed and skip apt each run
+THEHARVESTER_DOCKER_PREBUILT="${THEHARVESTER_DOCKER_PREBUILT:-false}"
+
 # ===== FORCE ANON USER CHECK =====
 CURRENT_USER=$(whoami)
 if [ "$CURRENT_USER" != "anon" ]; then
@@ -189,6 +195,7 @@ echo "5) Evasion Test"
 echo "6) Full Auto (Recon Docker → Scan → Web)"
 echo "7) Advanced Tools (subfinder/nuclei/sqlmap/ffuf)"
 echo "8) Generate Report"
+echo "9) Guided Info Gathering Wizard"
 echo -ne "> "
 read FASE
 
@@ -235,11 +242,16 @@ case $FASE in
              CMD="theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f ${LOGDIR}/${TARGET}_report"
              echo -e "${BLUE}Info: Using native theHarvester detected in PATH${NC}"
         else
-            # Docker theHarvester con fix permissions
-            log_info "Starting theHarvester via Docker"
-            CMD="docker run --rm -u root -v $LOGBASE:/logs kalilinux/kali-rolling bash -lc 'apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f /tmp/harvester/${TARGET}_report && cp /tmp/harvester/${TARGET}_report.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_report.* 2>/dev/null; exit 0' && sudo chown -R anon:anon $LOGBASE"
-            
-            echo -e "${BLUE}Info: Docker scarica Kali (~150MB cache prima volta)${NC}"
+            # Docker theHarvester with optional prebuilt image
+            log_info "Starting theHarvester via Docker (image: $THEHARVESTER_DOCKER_IMAGE, prebuilt=$THEHARVESTER_DOCKER_PREBUILT)"
+            if [ "$THEHARVESTER_DOCKER_PREBUILT" = "true" ]; then
+                # Prebuilt image is expected to already have theHarvester installed
+                CMD="docker run --rm -u root -v $LOGBASE:/logs \"$THEHARVESTER_DOCKER_IMAGE\" bash -lc 'mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f /tmp/harvester/${TARGET}_report && cp /tmp/harvester/${TARGET}_report.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_report.* 2>/dev/null; exit 0' && sudo chown -R anon:anon $LOGBASE"
+            else
+                # Default behaviour: install theHarvester inside Kali on each run
+                CMD="docker run --rm -u root -v $LOGBASE:/logs \"$THEHARVESTER_DOCKER_IMAGE\" bash -lc 'apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b all -f /tmp/harvester/${TARGET}_report && cp /tmp/harvester/${TARGET}_report.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_report.* 2>/dev/null; exit 0' && sudo chown -R anon:anon $LOGBASE"
+                echo -e "${BLUE}Info: Docker scarica Kali (~150MB cache prima volta)${NC}"
+            fi
         fi
     elif [ "$TOOL" = "2" ]; then
         log_info "Starting whois and DNS enumeration"
@@ -428,7 +440,11 @@ case $FASE in
     if command -v theHarvester &>/dev/null; then
          log_command "theHarvester reconnaissance (Native)" "theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b bing,linkedin,google -f ${LOGDIR}/${TARGET}_auto"
     else
-         log_command "theHarvester reconnaissance (Docker)" "docker run --rm -u root -v $LOGBASE:/logs kalilinux/kali-rolling bash -lc \"apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b bing,linkedin,google -f /tmp/harvester/${TARGET}_auto && cp /tmp/harvester/${TARGET}_auto.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_auto.* 2>/dev/null; exit 0\""
+         if [ "$THEHARVESTER_DOCKER_PREBUILT" = "true" ]; then
+             log_command "theHarvester reconnaissance (Docker prebuilt image)" "docker run --rm -u root -v $LOGBASE:/logs \"$THEHARVESTER_DOCKER_IMAGE\" bash -lc \"mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b bing,linkedin,google -f /tmp/harvester/${TARGET}_auto && cp /tmp/harvester/${TARGET}_auto.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_auto.* 2>/dev/null; exit 0\""
+         else
+             log_command "theHarvester reconnaissance (Docker Kali)" "docker run --rm -u root -v $LOGBASE:/logs \"$THEHARVESTER_DOCKER_IMAGE\" bash -lc \"apt update -qq && apt install -yq theharvester && mkdir -p /tmp/harvester && theHarvester -d $TARGET -l $THEHARVESTER_LIMIT -b bing,linkedin,google -f /tmp/harvester/${TARGET}_auto && cp /tmp/harvester/${TARGET}_auto.* /logs/ 2>/dev/null; chmod 666 /logs/${TARGET}_auto.* 2>/dev/null; exit 0\""
+         fi
          sudo chown -R anon:anon $LOGBASE
     fi
     
@@ -565,6 +581,163 @@ EOF
     log_success "Report generated: $REPORT_FILE"
     echo -e "${GREEN}Open in browser: file://$REPORT_FILE${NC}"
     
+    finalize_logging
+    exit 0
+    ;;
+9)
+    log_info "Starting Guided Info Gathering Wizard"
+    echo -e "\n${BLUE}=== Guided Info Gathering & Enumeration ===${NC}"
+    echo -e "${YELLOW}This wizard follows your manual workflow: whois → ASN/range → Shodan/FOFA/dorks → subdomains → DNS permutations → certificates → cloud/secrets.${NC}\n"
+
+    # STEP 1: whois + dig on domain and IP
+    echo -e "${BLUE}[1/6] whois + dig (domain & IP)${NC}"
+    WHOIS_FILE="${LOGDIR}/whois_domain.txt"
+    DIG_A_FILE="${LOGDIR}/dig_a.txt"
+    DIG_MX_FILE="${LOGDIR}/dig_mx.txt"
+    DIG_NS_FILE="${LOGDIR}/dig_ns.txt"
+
+    echo -e "${YELLOW}Running whois on domain...${NC}"
+    whois "$TARGET" > "$WHOIS_FILE" 2>/dev/null || echo -e "${YELLOW}whois failed or returned no data for $TARGET${NC}"
+
+    echo -e "${YELLOW}Running dig (A / MX / NS)...${NC}"
+    dig "$TARGET" +short > "$DIG_A_FILE" 2>/dev/null || true
+    dig MX "$TARGET" +short > "$DIG_MX_FILE" 2>/dev/null || true
+    dig NS "$TARGET" +short > "$DIG_NS_FILE" 2>/dev/null || true
+
+    # Extract inetnum / route / origin ASN from whois (if present)
+    INETNUM=$(grep -m1 -E "inetnum:" "$WHOIS_FILE" 2>/dev/null | awk '{$1=""; sub(/^ /,""); print}')
+    ROUTE=$(grep -m1 -E "route:" "$WHOIS_FILE" 2>/dev/null | awk '{$1=""; sub(/^ /,""); print}')
+    ASN=$(grep -m1 -E "origin:" "$WHOIS_FILE" 2>/dev/null | awk '{$1=""; sub(/^ /,""); print}')
+
+    echo -e "\n${CYAN}Summary from whois:${NC}"
+    [ -n "$INETNUM" ] && echo "  inetnum: $INETNUM"
+    [ -n "$ROUTE" ] && echo "  route:   $ROUTE"
+    [ -n "$ASN" ] && echo "  origin:  $ASN"
+    echo -e "\nwhois saved to:      ${YELLOW}$WHOIS_FILE${NC}"
+    echo -e "dig A records:       ${YELLOW}$DIG_A_FILE${NC}"
+    echo -e "dig MX records:      ${YELLOW}$DIG_MX_FILE${NC}"
+    echo -e "dig NS records:      ${YELLOW}$DIG_NS_FILE${NC}\n"
+
+    echo -ne "${YELLOW}Press ENTER to continue to Shodan/FOFA & Google dorks...${NC}"
+    read
+
+    # STEP 2: Shodan / FOFA / Google Dorks hints
+    echo -e "\n${BLUE}[2/6] Shodan / FOFA / Google Dorks${NC}"
+    echo -e "${YELLOW}Use these queries in Shodan/FOFA/Google based on whois output.${NC}\n"
+
+    if [ -n "$ROUTE" ]; then
+        echo "Shodan by network range (from 'route' or 'inetnum'):"
+        echo "  ip:${ROUTE}"
+        echo ""
+    elif [ -n "$INETNUM" ]; then
+        echo "Shodan by network range (from 'inetnum'):"
+        echo "  ip:${INETNUM}"
+        echo ""
+    fi
+
+    if [ -n "$ASN" ]; then
+        echo "Shodan/FOFA by ASN:"
+        echo "  ASN: ${ASN}"
+        echo ""
+    fi
+
+    echo "Google dorks examples:"
+    echo "  site:*.${TARGET}"
+    echo "  site:*.${TARGET} intext:\"index of\""
+    echo ""
+
+    echo -ne "${YELLOW}Press ENTER to continue to passive subdomain enumeration (subfinder)...${NC}"
+    read
+
+    # STEP 3: Passive subdomain enumeration (subfinder)
+    echo -e "\n${BLUE}[3/6] Passive Subdomain Enumeration (subfinder)${NC}"
+    SUBF_FILE="${LOGDIR}/subfinder.txt"
+    if command -v subfinder >/dev/null 2>&1; then
+        echo -e "${YELLOW}Running subfinder...${NC}"
+        $PROXY subfinder -d "$TARGET" -silent -o "$SUBF_FILE" 2>/dev/null || true
+        echo -e "subfinder output saved to: ${YELLOW}$SUBF_FILE${NC}"
+    else
+        echo -e "${RED}subfinder non installato.${NC}"
+        echo "You can install it via installer / Pre-Flight (0) and run manually:"
+        echo "  subfinder -d $TARGET -silent -o $SUBF_FILE"
+    fi
+
+    echo -ne "${YELLOW}Press ENTER to continue to active DNS brute/permutations (puredns / alterx / dnsx)...${NC}"
+    read
+
+    # STEP 4: Active DNS brute & permutations (puredns / alterx / dnsx)
+    echo -e "\n${BLUE}[4/6] Active DNS brute & permutations${NC}"
+    echo -e "${YELLOW}This step is optional and depends on extra tools (puredns, alterx, dnsx).${NC}\n"
+
+    if command -v puredns >/dev/null 2>&1; then
+        echo "Example puredns command:"
+        echo "  puredns bruteforce /path/to/wordlist.txt $TARGET -r resolvers.txt -w ${LOGDIR}/puredns.txt"
+    else
+        echo "puredns not found. Install it if you want active DNS brute-force."
+    fi
+    echo ""
+
+    if command -v alterx >/dev/null 2>&1 && command -v dnsx >/dev/null 2>&1; then
+        echo "Example permutation + resolution chain using alterx + dnsx:"
+        echo "  cat ${SUBF_FILE:-subdomains.txt} | alterx | dnsx -o ${LOGDIR}/dnsx.txt"
+    else
+        echo "alterx and/or dnsx not found."
+        echo "Example (manual) from your notes:"
+        echo "  cat filesottodomini.txt | alterx | dnsx"
+    fi
+    echo ""
+
+    echo -ne "${YELLOW}Press ENTER to continue to certificate-based subdomains (crt.sh)...${NC}"
+    read
+
+    # STEP 5: crt.sh certificate enumeration
+    echo -e "\n${BLUE}[5/6] Certificate-based subdomains (crt.sh)${NC}"
+    CRT_FILE="${LOGDIR}/crtsh_${TARGET}.json"
+    if command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+        echo -e "${YELLOW}Querying crt.sh and saving raw JSON to:${NC} ${YELLOW}$CRT_FILE${NC}"
+        curl -s "https://crt.sh/?q=${TARGET}&output=json" > "$CRT_FILE" 2>/dev/null || echo -e "${YELLOW}crt.sh request failed or returned no data.${NC}"
+        echo ""
+        echo "Manual example (same as your notes):"
+        echo "  curl -s \"https://crt.sh/?q=${TARGET}&output=json\" | jq -r '.[].name_value' | sort -u"
+    else
+        echo -e "${RED}curl and/or jq not available; cannot auto-query crt.sh.${NC}"
+        echo "Use this command manually:"
+        echo "  curl -s \"https://crt.sh/?q=${TARGET}&output=json\" | jq -r '.[].name_value' | sort -u"
+    fi
+
+    echo -ne "${YELLOW}Press ENTER to continue to cloud/secrets/favicon helpers...${NC}"
+    read
+
+    # STEP 6: Cloud buckets, secrets, favicon-based hunting
+    echo -e "\n${BLUE}[6/6] Cloud buckets, secrets & favicon hunting${NC}"
+
+    echo -e "\n${CYAN}Cloud storage discovery (grayhatwarfare / cloud_enum):${NC}"
+    if command -v cloud_enum >/dev/null 2>&1; then
+        echo "Example cloud_enum usage:"
+        echo "  cloud_enum -k \"${TARGET}\" -o ${LOGDIR}/cloud_enum_${TARGET}.txt"
+    else
+        echo "cloud_enum not found. From your notes:"
+        echo "  Use grayhatwarfare.com UI or the cloud_enum CLI to search misconfigured buckets."
+    fi
+
+    echo -e "\n${CYAN}Secrets in repositories (GitHub dorks / TruffleHog):${NC}"
+    if command -v trufflehog >/dev/null 2>&1; then
+        echo "Example TruffleHog usage (after git clone /tmp/repo):"
+        echo "  trufflehog --regex --entropy=False /tmp/repo"
+    else
+        echo "trufflehog not found. Manual command from your notes:"
+        echo "  trufflehog --regex --entropy=False /tmp/repo"
+    fi
+
+    echo -e "\n${CYAN}Favicon-based hunting (favfreak/favhash + Shodan icon_hash):${NC}"
+    echo "Example Shodan dork:"
+    echo "  icon_hash=\"0000000\""
+    echo "Compute the favicon hash with favfreak/favhash, then search that hash on Shodan."
+
+    echo -e "\n${GREEN}Guided Info Gathering Wizard completed.${NC}"
+    echo -e "All artifacts saved under: ${YELLOW}$LOGDIR${NC}"
+
+    log_success "Guided Info Gathering Wizard completed"
     finalize_logging
     exit 0
     ;;

@@ -19,6 +19,10 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Set path for sysctl (Debian/Ubuntu fix)
+SYSCTL="/sbin/sysctl"
+if ! [ -x "$SYSCTL" ]; then SYSCTL="sysctl"; fi
+
 echo -e "${CYAN}=== Enhanced Evasion Mode ===${NC}\n"
 
 # Track what was applied for accurate summary
@@ -68,12 +72,12 @@ echo -e "${GREEN}✓ Timezone set to: $RANDOM_TZ${NC}"
 
 # 4. Disable IPv6 (Prevent Leaks)
 echo -e "\n${YELLOW}[4/10] Disabling IPv6${NC}"
-sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1
-sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1
-sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null 2>&1
+$SYSCTL -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1
+$SYSCTL -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1
+$SYSCTL -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null 2>&1
 
 # Verify IPv6 is disabled
-IPV6_CHECK=$(sysctl net.ipv6.conf.all.disable_ipv6 2>/dev/null | awk '{print $3}')
+IPV6_CHECK=$($SYSCTL net.ipv6.conf.all.disable_ipv6 2>/dev/null | awk '{print $3}')
 if [ "$IPV6_CHECK" = "1" ]; then
     echo -e "${GREEN}✓ IPv6 disabled system-wide including loopback (leak prevention active)${NC}"
 else

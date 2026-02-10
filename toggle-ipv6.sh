@@ -15,8 +15,12 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Set path for sysctl (Debian/Ubuntu fix)
+SYSCTL="/sbin/sysctl"
+if ! [ -x "$SYSCTL" ]; then SYSCTL="sysctl"; fi
+
 # Check current IPv6 status
-IPV6_STATUS=$(sysctl net.ipv6.conf.all.disable_ipv6 2>/dev/null | awk '{print $3}')
+IPV6_STATUS=$($SYSCTL net.ipv6.conf.all.disable_ipv6 2>/dev/null | awk '{print $3}')
 
 echo -e "${CYAN}=== IPv6 Toggle Utility ===${NC}\n"
 
@@ -43,8 +47,8 @@ if [ "$IPV6_STATUS" = "1" ]; then
     
     if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
         echo -e "\n${YELLOW}Enabling IPv6...${NC}"
-        sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
-        sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
+        $SYSCTL -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null
+        $SYSCTL -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null
         echo -e "${GREEN}✓ IPv6 enabled${NC}"
         
         # Verify
@@ -74,8 +78,8 @@ else
     
     if [[ ! "$CONFIRM" =~ ^[Nn]$ ]]; then
         echo -e "\n${YELLOW}Disabling IPv6...${NC}"
-        sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null
-        sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null
+        $SYSCTL -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null
+        $SYSCTL -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null
         echo -e "${GREEN}✓ IPv6 disabled${NC}"
         echo -e "${GREEN}✓ System is now protected from IPv6 leaks${NC}"
     else

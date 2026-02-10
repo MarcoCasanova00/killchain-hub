@@ -8,6 +8,10 @@ PASS=0
 FAIL=0
 WARN=0
 
+# Set path for sysctl (Debian/Ubuntu fix)
+SYSCTL="/sbin/sysctl"
+if ! [ -x "$SYSCTL" ]; then SYSCTL="sysctl"; fi
+
 # Header
 clear
 echo -e "${CYAN}"
@@ -115,7 +119,7 @@ else
 fi
 
 # IPv6 Leak Test
-IPV6_DISABLE=$(sysctl net.ipv6.conf.all.disable_ipv6 2>/dev/null | awk '{print $3}')
+IPV6_DISABLE=$($SYSCTL net.ipv6.conf.all.disable_ipv6 2>/dev/null | awk '{print $3}')
 if [ "$IPV6_DISABLE" = "1" ]; then
     check_status "IPv6 Status" "PASS" "Disabled (No IPv6 Leaks)"
 else

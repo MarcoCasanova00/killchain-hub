@@ -93,6 +93,14 @@ if [ ! -f /etc/resolv.conf.backup ]; then
 fi
 
 # Temporarily set DNS to Tor (session-based)
+# First ensure Tor is configured to handle DNS on port 53
+if ! grep -q "DNSPort 53" /etc/tor/torrc 2>/dev/null; then
+    echo -e "${YELLOW}Configuring Tor to handle DNS requests...${NC}"
+    echo "DNSPort 53" | sudo tee -a /etc/tor/torrc >/dev/null
+    echo "DNSListenAddress 127.0.0.1" | sudo tee -a /etc/tor/torrc >/dev/null
+    systemctl restart tor 2>/dev/null || service tor restart 2>/dev/null
+fi
+
 echo "nameserver 127.0.0.1" > /etc/resolv.conf
 
 echo -e "${GREEN}✓ /etc/resolv.conf set to 127.0.0.1 (temporary, session-based)${NC}"

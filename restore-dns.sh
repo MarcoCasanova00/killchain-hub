@@ -1,99 +1,120 @@
-#!/bin/bash
+#!/bin/sh
 # DNS Restoration Script for Killchain-Hub
 # Use this if evasion mode broke your system DNS
+# Optimized for POSIX sh and bash compatibility on Debian/Arch/etc.
 
+# Colors (standard POSIX echo doesn't support -e, so we use printf)
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-echo -e "${CYAN}=== DNS Restoration Utility ===${NC}\n"
+log_msg() {
+    printf "${2}%s${NC}\n" "$1"
+}
+
+log_msg "=== DNS Restoration Utility ===" "${CYAN}"
+printf "\n"
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}This script requires root privileges!${NC}"
-    echo "Run: sudo ./restore-dns.sh"
+# Use id -u for portability (EUID is bash-only)
+if [ "$(id -u)" != "0" ]; then
+    log_msg "This script requires root privileges!" "${RED}"
+    printf "Run: sudo %s\n" "$0"
     exit 1
 fi
 
 # Display current DNS
 CURRENT_DNS=$(grep nameserver /etc/resolv.conf 2>/dev/null | head -n1 | awk '{print $2}')
-echo -e "${YELLOW}Current DNS server: ${CYAN}$CURRENT_DNS${NC}\n"
+printf "${YELLOW}Current DNS server: ${CYAN}%s${NC}\n\n" "$CURRENT_DNS"
 
 # Check if anonymized
 if [ "$CURRENT_DNS" = "127.0.0.1" ]; then
-    echo -e "${GREEN}✓ DNS is currently anonymized (routing through Tor)${NC}\n"
+    log_msg "✓ DNS is currently anonymized (routing through Tor)" "${GREEN}"
 else
-    echo -e "${YELLOW}⚠ DNS is NOT anonymized (may be leaking to ISP)${NC}\n"
+    log_msg "⚠ DNS is NOT anonymized (may be leaking to ISP)" "${YELLOW}"
 fi
+printf "\n"
 
 # Warning
-echo -e "${RED}⚠️  WARNING - DE-ANONYMIZATION RISK ⚠️${NC}"
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo "Restoring DNS will:"
-echo "  • Allow your system to resolve domain names normally"
-echo "  • Re-enable access to package managers (apt/yum)"
-echo "  • Allow git, curl, wget to work with domain names"
-echo ""
-echo -e "${RED}BUT it will also:${NC}"
-echo "  • Expose DNS queries to your ISP or VPS provider"
-echo "  • Potentially leak your real location/identity"
-echo "  • Bypass Tor for DNS resolution"
-echo ""
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+log_msg "⚠️  WARNING - DE-ANONYMIZATION RISK ⚠️" "${RED}"
+log_msg "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "${YELLOW}"
+printf "Restoring DNS will:\n"
+printf "  • Allow your system to resolve domain names normally\n"
+printf "  • Re-enable access to package managers (apt/yum)\n"
+printf "  • Allow git, curl, wget to work with domain names\n\n"
+
+log_msg "BUT it will also:" "${RED}"
+printf "  • Expose DNS queries to your ISP or VPS provider\n"
+printf "  • Potentially leak your real location/identity\n"
+printf "  • Bypass Tor for DNS resolution\n\n"
+
+log_msg "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "${YELLOW}"
+printf "\n"
 
 # Ask for confirmation
-echo -ne "Do you want to restore DNS? (y/N): "
+printf "Do you want to restore DNS? (y/N): "
 read -r CONFIRM
 
-if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-    echo -e "\n${GREEN}Aborted. DNS remains anonymized.${NC}"
+if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+    printf "\n"
+    log_msg "Aborted. DNS remains anonymized." "${GREEN}"
     exit 0
 fi
 
-echo ""
+printf "\n"
 
 # Try to restore from backup first
 if [ -f /etc/resolv.conf.backup ]; then
-    echo -e "${YELLOW}[1/2] Restoring from backup...${NC}"
+    log_msg "[1/2] Restoring from backup..." "${YELLOW}"
     cp /etc/resolv.conf.backup /etc/resolv.conf
-    echo -e "${GREEN}✓ DNS restored from backup${NC}"
+    log_msg "✓ DNS restored from backup" "${GREEN}"
 else
-    echo -e "${YELLOW}[1/2] No backup found. Using fallback DNS...${NC}"
+    log_msg "[1/2] No backup found. Using fallback DNS..." "${YELLOW}"
     
     # Detect VPS provider and use appropriate DNS
     if grep -qi "google" /sys/class/dmi/id/product_name 2>/dev/null || grep -qi "google" /sys/class/dmi/id/sys_vendor 2>/dev/null; then
         # Google Cloud Platform
         FALLBACK_DNS="169.254.169.254"
-        echo -e "${CYAN}Google Cloud detected - using metadata DNS${NC}"
-    elif grep -qi "amazon\|aws" /sys/class/dmi/id/product_name 2>/dev/null; then
+        log_msg "Google Cloud detected - using metadata DNS" "${CYAN}"
+    elif [ -f /sys/class/dmi/id/product_name ] && grep -qi "amazon\|aws" /sys/class/dmi/id/product_name 2>/dev/null; then
         # AWS
         FALLBACK_DNS="169.254.169.253"
-        echo -e "${CYAN}AWS detected - using VPC DNS${NC}"
+        log_msg "AWS detected - using VPC DNS" "${CYAN}"
     else
         # Generic fallback (Google Public DNS)
         FALLBACK_DNS="8.8.8.8"
-        echo -e "${CYAN}Using Google Public DNS as fallback${NC}"
+        log_msg "Using Google Public DNS as fallback" "${CYAN}"
     fi
     
-    echo "nameserver $FALLBACK_DNS" > /etc/resolv.conf
-    echo -e "${GREEN}✓ DNS set to $FALLBACK_DNS${NC}"
+    printf "nameserver %s\n" "$FALLBACK_DNS" > /etc/resolv.conf
+    log_msg "✓ DNS set to $FALLBACK_DNS" "${GREEN}"
 fi
 
 # Verify restoration
-echo -e "\n${YELLOW}[2/2] Verifying DNS resolution...${NC}"
-if timeout 5 nslookup google.com >/dev/null 2>&1 || timeout 5 host google.com >/dev/null 2>&1; then
-    NEW_DNS=$(grep nameserver /etc/resolv.conf 2>/dev/null | head -n1 | awk '{print $2}')
-    echo -e "${GREEN}✓ DNS is working! (using $NEW_DNS)${NC}"
+printf "\n"
+log_msg "[2/2] Verifying DNS resolution..." "${YELLOW}"
+# Use command -v to check for availability
+if command -v nslookup >/dev/null 2>&1; then
+    DNS_TOOL="nslookup google.com"
+elif command -v host >/dev/null 2>&1; then
+    DNS_TOOL="host google.com"
 else
-    echo -e "${RED}✗ DNS still not working. Manual intervention needed.${NC}"
-    echo "Try: echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf"
+    DNS_TOOL="ping -c 1 8.8.8.8" # Last resort
+fi
+
+if $DNS_TOOL >/dev/null 2>&1; then
+    NEW_DNS=$(grep nameserver /etc/resolv.conf 2>/dev/null | head -n1 | awk '{print $2}')
+    log_msg "✓ DNS is working! (using $NEW_DNS)" "${GREEN}"
+else
+    log_msg "✗ DNS still not working. Manual intervention needed." "${RED}"
+    printf "Try: echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf\n"
     exit 1
 fi
 
-echo ""
-echo -e "${GREEN}=== DNS Restoration Complete ===${NC}"
-echo -e "${RED}⚠ You are NO LONGER anonymized for DNS queries!${NC}"
-echo -e "${YELLOW}→ To re-anonymize: run killchain-hub → Option 5 → Option 2${NC}"
-echo ""
+printf "\n"
+log_msg "=== DNS Restoration Complete ===" "${GREEN}"
+log_msg "⚠ You are NO LONGER anonymized for DNS queries!" "${RED}"
+log_msg "→ To re-anonymize: run killchain-hub → Option 5 → Option 2" "${YELLOW}"
+printf "\n"

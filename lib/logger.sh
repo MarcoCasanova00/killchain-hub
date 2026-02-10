@@ -179,7 +179,10 @@ finalize_logging() {
     
     # Show error count if any
     if [ -f "$LOG_ERROR_FILE" ]; then
-        local error_count=$(grep -c "^\[" "$LOG_ERROR_FILE" 2>/dev/null || echo "0")
+        local error_count=$(grep -c "^\[" "$LOG_ERROR_FILE" 2>/dev/null)
+        # Handle empty result (grep error) or ensure valid integer
+        [[ -z "$error_count" ]] && error_count=0
+        
         if [ "$error_count" -gt 1 ]; then  # More than just the header
             log_warning "Errors logged: $((error_count - 1)) - see $LOG_ERROR_FILE"
         fi

@@ -71,17 +71,18 @@ echo -e "${GREEN}✓ IPv6 disabled system-wide${NC}"
 
 # 5. DNS Configuration (Force Tor DNS)
 echo -e "\n${YELLOW}[5/10] Enforcing DNS over Tor${NC}"
+
 # Backup existing resolv.conf
 if [ ! -f /etc/resolv.conf.backup ]; then
     cp /etc/resolv.conf /etc/resolv.conf.backup
 fi
 
-# Create new resolv.conf
+# Temporarily set DNS to Tor (session-based)
 echo "nameserver 127.0.0.1" > /etc/resolv.conf
-# Lock file to prevent overwrites (optional, but good for persistence during session)
-# chattr +i /etc/resolv.conf 2>/dev/null 
 
-echo -e "${GREEN}✓ /etc/resolv.conf set to 127.0.0.1${NC}"
+echo -e "${GREEN}✓ /etc/resolv.conf set to 127.0.0.1 (temporary, session-based)${NC}"
+echo -e "${YELLOW}⚠ Note: On VPS/Cloud, this change may revert on reboot or network changes.${NC}"
+echo -e "${YELLOW}  For persistent changes, configure your VPS to use Tor DNS manually.${NC}"
 
 # 6. Firewall Kill Switch (IPTables)
 echo -e "\n${YELLOW}[6/10] Configuring Firewall Kill Switch for 'anon'${NC}"

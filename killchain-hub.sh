@@ -344,21 +344,36 @@ case $FASE in
     fi
     ;;
 5)
-    log_info "Running enhanced evasion test"
+    log_info "Evasion Menu Selected"
+    echo -e "\n${BLUE}=== Evasion & Anonymity ===${NC}"
+    echo "1) Check Current Status (Safe)"
+    echo "2) Apply Enhanced Evasion Mode (REQUIRES SUDO)"
+    echo "   - Disables IPv6"
+    echo "   - Forces DNS to Tor (127.0.0.1)"
+    echo "   - Activates Firewall Kill Switch for 'anon'"
+    echo "   - Clears Logs & History"
+    echo -ne "\nSelect option (1-2): "
+    read EV_CHOICE
     
-    # Check if enhanced evasion script exists
-    if [ -f "$SCRIPT_DIR/lib/evasion.sh" ]; then
-        bash "$SCRIPT_DIR/lib/evasion.sh" | tee "${LOGDIR}/evasion.txt"
-    elif [ -f "/usr/local/bin/lib/evasion.sh" ]; then
-        bash "/usr/local/bin/lib/evasion.sh" | tee "${LOGDIR}/evasion.txt"
+    if [ "$EV_CHOICE" = "2" ]; then
+        log_info "Applying enhanced evasion measures"
+        # Check if enhanced evasion script exists
+        if [ -f "$SCRIPT_DIR/lib/evasion.sh" ]; then
+            sudo bash "$SCRIPT_DIR/lib/evasion.sh" | tee "${LOGDIR}/evasion_apply.txt"
+        elif [ -f "/usr/local/bin/lib/evasion.sh" ]; then
+            sudo bash "/usr/local/bin/lib/evasion.sh" | tee "${LOGDIR}/evasion_apply.txt"
+        else
+            log_error "Evasion script not found"
+            echo -e "${RED}Evasion script not found!${NC}"
+        fi
     else
-        # Fallback to basic test
-        log_warning "Enhanced evasion script not found, using basic test"
-        CMD="echo 'Real IP:' && curl -s ifconfig.me && echo -e '\nTor IP:' && $PROXY curl -s ifconfig.me && echo -e '\nTest salvato in ${LOGDIR}/evasion.txt' && { echo \"Real: \$(curl -s ifconfig.me)\"; echo \"Tor: \$($PROXY curl -s ifconfig.me)\"; } > ${LOGDIR}/evasion.txt"
+        log_info "Running evasion test only"
+        # Run pre-flight check in evasion mode (or just basic IP check)
+        CMD="echo 'Real IP:' && curl -s --max-time 5 ifconfig.me && echo -e '\nTor IP:' && $PROXY curl -s --max-time 5 ifconfig.me && echo -e '\n[!] Run Option 0 (Pre-Flight) for full details.'"
         eval "$CMD"
     fi
     
-    log_success "Evasion test completed"
+    log_success "Evasion step completed"
     finalize_logging
     exit 0
     ;;

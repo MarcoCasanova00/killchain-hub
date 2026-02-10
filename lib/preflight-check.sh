@@ -107,11 +107,28 @@ else
 fi
 
 # DNS Leak Test
+# DNS Leak Test
 DNS_SERVER=$(grep nameserver /etc/resolv.conf 2>/dev/null | head -n1 | awk '{print $2}')
 if [ "$DNS_SERVER" = "127.0.0.1" ]; then
     check_status "DNS Configuration" "PASS" "Routed through localhost (Tor)"
 else
-    check_status "DNS Configuration" "WARN" "Using $DNS_SERVER (potential leak)"
+    check_status "DNS Configuration" "FAIL" "Using $DNS_SERVER (DNS Leak Risk!)"
+fi
+
+# IPv6 Leak Test
+IPV6_DISABLE=$(sysctl net.ipv6.conf.all.disable_ipv6 2>/dev/null | awk '{print $3}')
+if [ "$IPV6_DISABLE" = "1" ]; then
+    check_status "IPv6 Status" "PASS" "Disabled (No IPv6 Leaks)"
+else
+    check_status "IPv6 Status" "WARN" "Enabled (Potential IPv6 Leak)"
+fi
+
+# Firewall Kill Switch Test
+# Check if there are OUTPUT rules for anon user
+if sudo iptables -L OUTPUT -n -v 2>/dev/null | grep -q "owner UID match"; then
+    check_status "Firewall Kill Switch" "PASS" "Rules detected for user restriction"
+else
+    check_status "Firewall Kill Switch" "WARN" "No specific user restriction rules found"
 fi
 
 # Check for WebRTC leaks (if browser tools available)

@@ -28,7 +28,6 @@ apt install -y \
     torsocks \
     tor \
     nmap \
-    gobuster \
     hydra \
     nikto \
     dnsrecon \
@@ -46,7 +45,24 @@ apt install -y \
     golang-go \
     build-essential \
     macchanger \
-    net-tools
+    net-tools \
+    p7zip-full \
+    libpcap-dev
+
+# Improved Go Installation
+GO_VERSION="1.21.6"
+if ! command -v go &>/dev/null || [[ $(go version | awk '{print $3}' | sed 's/go//') < "1.21.0" ]]; then
+    echo -e "${YELLOW}Go is missing or outdated. Installing Go ${GO_VERSION}...${NC}"
+    ARCH=$(dpkg --print-architecture)
+    case $ARCH in
+        amd64) GO_ARCH="amd64" ;;
+        arm64) GO_ARCH="arm64" ;;
+        *) GO_ARCH="amd64" ;;
+    esac
+    wget "https://golang.org/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" -O /tmp/go.tar.gz
+    rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tar.gz
+    rm /tmp/go.tar.gz
+fi
 
 # Install Python requirements
 echo -e "${YELLOW}Installazione dipendenze Python...${NC}"
@@ -59,48 +75,81 @@ fi
 # Install dirsearch via pip (if not in requirements.txt)
 pip3 install dirsearch --break-system-packages --no-cache-dir 2>/dev/null || true
 
-# Install Go-based tools
-echo -e "${YELLOW}Installazione tool Go...${NC}"
-
-# Setup Go environment
+# Setup Go environment for installer session
 export GOPATH=/root/go
 export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin
 mkdir -p $GOPATH
 
-# Install subfinder
-if ! command -v subfinder &>/dev/null; then
-    echo -e "${YELLOW}Installazione subfinder...${NC}"
-    go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
-    cp $GOPATH/bin/subfinder /usr/local/bin/ 2>/dev/null || true
-fi
+# Function to install Go tools with fallback
+install_go_tool() {
+    local name=$1
+    local repo=$2
+    local binary_name=${3:-$1}
+    local github_repo=$4 # e.g. "projectdiscovery/subfinder"
+    
+    echo -e "${YELLOW}Installazione $name...${NC}"
+    
+    # Try go install first
+    if go install -v "$repo@latest" 2>/dev/null; then
+        cp "$GOPATH/bin/$binary_name" /usr/local/bin/ 2>/dev/null || true
+        if command -v "$binary_name" &>/dev/null; then
+            echo -e "${GREEN}✓ $name installato via go install${NC}"
+            return 0
+        fi
+    fi
+    
+    # Fallback to GitHub Releases if github_repo is provided
+    if [ -n "$github_repo" ]; then
+        echo -e "${YELLOW}Attenzione: go install fallito. Tento download binario da GitHub ($github_repo)...${NC}"
+        ARCH=$(dpkg --print-architecture)
+        case $ARCH in
+            amd64) G_ARCH="amd64" ;;
+            arm64) G_ARCH="arm64" ;;
+            *) G_ARCH="amd64" ;;
+        esac
+        
+        # Get latest release tag
+        LATEST_TAG=$(curl -s "https://api.github.com/repos/$github_repo/releases/latest" | jq -r .tag_name)
+        if [ "$LATEST_TAG" != "null" ] && [ -n "$LATEST_TAG" ]; then
+            # Clean tag (remove 'v')
+            VERSION=${LATEST_TAG#v}
+            
+            # This is a bit heuristic as naming conventions vary
+            # We'll try common patterns
+            DOWNLOAD_URL=$(curl -s "https://api.github.com/repos/$github_repo/releases/latest" | \
+                jq -r ".assets[] | select(.name | contains(\"linux\") and contains(\"$G_ARCH\") and (contains(\"zip\") or contains(\"tar.gz\"))) | .browser_download_url" | head -n 1)
+            
+            if [ -n "$DOWNLOAD_URL" ] && [ "$DOWNLOAD_URL" != "null" ]; then
+                wget -q "$DOWNLOAD_URL" -O "/tmp/$name.bin"
+                if [[ "$DOWNLOAD_URL" == *.zip ]]; then
+                    unzip -o "/tmp/$name.bin" -d /tmp/ 2>/dev/null || true
+                else
+                    tar -xzf "/tmp/$name.bin" -C /tmp/ 2>/dev/null || true
+                fi
+                
+                # Find the binary in /tmp (some tools put it in a subfolder)
+                find /tmp -type f -name "$binary_name" -exec cp {} /usr/local/bin/ \; 2>/dev/null || true
+                chmod +x "/usr/local/bin/$binary_name" 2>/dev/null || true
+                
+                if command -v "$binary_name" &>/dev/null; then
+                    echo -e "${GREEN}✓ $name installato via GitHub Release ($LATEST_TAG)${NC}"
+                    rm -f "/tmp/$name.bin"
+                    return 0
+                fi
+            fi
+        fi
+    fi
+    echo -e "${RED}✗ Errore: Impossibile installare $name${NC}"
+    return 1
+}
 
-# Install nuclei
-if ! command -v nuclei &>/dev/null; then
-    echo -e "${YELLOW}Installazione nuclei...${NC}"
-    go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-    cp $GOPATH/bin/nuclei /usr/local/bin/ 2>/dev/null || true
-fi
-
-# Install ffuf
-if ! command -v ffuf &>/dev/null; then
-    echo -e "${YELLOW}Installazione ffuf...${NC}"
-    go install github.com/ffuf/ffuf/v2@latest
-    cp $GOPATH/bin/ffuf /usr/local/bin/ 2>/dev/null || true
-fi
-
-# Install amass
-if ! command -v amass &>/dev/null; then
-    echo -e "${YELLOW}Installazione amass...${NC}"
-    go install -v github.com/owasp-amass/amass/v4/...@master
-    cp $GOPATH/bin/amass /usr/local/bin/ 2>/dev/null || true
-fi
-
-# Install gospider
-if ! command -v gospider &>/dev/null; then
-    echo -e "${YELLOW}Installazione gospider...${NC}"
-    go install github.com/jaeles-project/gospider@latest
-    cp $GOPATH/bin/gospider /usr/local/bin/ 2>/dev/null || true
-fi
+# Install tools with GitHub fallbacks
+install_go_tool "gobuster" "github.com/OJ/gobuster/v3" "gobuster" "OJ/gobuster"
+install_go_tool "subfinder" "github.com/projectdiscovery/subfinder/v2/cmd/subfinder" "subfinder" "projectdiscovery/subfinder"
+install_go_tool "nuclei" "github.com/projectdiscovery/nuclei/v3/cmd/nuclei" "nuclei" "projectdiscovery/nuclei"
+install_go_tool "ffuf" "github.com/ffuf/ffuf/v2" "ffuf" "ffuf/ffuf"
+install_go_tool "amass" "github.com/owasp-amass/amass/v4/..." "amass" "owasp-amass/amass"
+install_go_tool "gospider" "github.com/jaeles-project/gospider" "gospider" "jaeles-project/gospider"
 
 # Setup Docker
 echo -e "${YELLOW}Configurazione Docker...${NC}"

@@ -160,12 +160,30 @@ install_go_tool() {
 }
 
 # Install tools with GitHub fallbacks
-install_go_tool "gobuster" "github.com/OJ/gobuster/v3" "gobuster" "OJ/gobuster"
-install_go_tool "subfinder" "github.com/projectdiscovery/subfinder/v2/cmd/subfinder" "subfinder" "projectdiscovery/subfinder"
-install_go_tool "nuclei" "github.com/projectdiscovery/nuclei/v3/cmd/nuclei" "nuclei" "projectdiscovery/nuclei"
-install_go_tool "ffuf" "github.com/ffuf/ffuf/v2" "ffuf" "ffuf/ffuf"
-install_go_tool "amass" "github.com/owasp-amass/amass/v4/..." "amass" "owasp-amass/amass"
-install_go_tool "gospider" "github.com/jaeles-project/gospider" "gospider" "jaeles-project/gospider"
+# Gobuster: if Go/GitHub install fails, try apt-based fallback where available
+if ! install_go_tool "gobuster" "github.com/OJ/gobuster/v3" "gobuster" "OJ/gobuster"; then
+    echo -e "${YELLOW}Gobuster Go/GitHub install failed.${NC}"
+    if command -v apt-get >/dev/null 2>&1 || command -v apt >/dev/null 2>&1; then
+        echo -e "${YELLOW}Trying apt-based install for gobuster as an additional fallback...${NC}"
+        if command -v apt-get >/dev/null 2>&1; then
+            apt-get install -y gobuster 2>/dev/null || echo -e "${RED}apt-get could not install gobuster (maybe not in current repos).${NC}"
+        else
+            apt install -y gobuster 2>/dev/null || echo -e "${RED}apt could not install gobuster (maybe not in current repos).${NC}"
+        fi
+        if command -v gobuster >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ gobuster installed via APT fallback${NC}"
+        else
+            echo -e "${YELLOW}gobuster is still missing. You can install it manually or later via Pre-Flight (fase 0) interactive installer.${NC}"
+        fi
+    fi
+fi
+
+# For the remaining Go tools, a failure should not abort the whole installer
+install_go_tool "subfinder" "github.com/projectdiscovery/subfinder/v2/cmd/subfinder" "subfinder" "projectdiscovery/subfinder" || true
+install_go_tool "nuclei" "github.com/projectdiscovery/nuclei/v3/cmd/nuclei" "nuclei" "projectdiscovery/nuclei" || true
+install_go_tool "ffuf" "github.com/ffuf/ffuf/v2" "ffuf" "ffuf/ffuf" || true
+install_go_tool "amass" "github.com/owasp-amass/amass/v4/..." "amass" "owasp-amass/amass" || true
+install_go_tool "gospider" "github.com/jaeles-project/gospider" "gospider" "jaeles-project/gospider" || true
 
 # Setup Docker
 echo -e "${YELLOW}Configurazione Docker...${NC}"

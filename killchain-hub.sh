@@ -152,6 +152,14 @@ echo -ne "Target dominio (es. esempio.it): "
 read TARGET
 [ -z "$TARGET" ] && { echo -e "${RED}Target richiesto!${NC}"; exit 1; }
 
+SESSION_DEFAULT="${TARGET}_$(date +%Y%m%d_%H%M%S)"
+echo -ne "Nome cartella log per questa sessione (default: ${SESSION_DEFAULT}): "
+read SESSION_NAME
+SESSION_NAME=${SESSION_NAME:-"$SESSION_DEFAULT"}
+
+# Basic sanitization (spazi → underscore)
+SESSION_NAME_SANITIZED=$(echo "$SESSION_NAME" | tr ' ' '_')
+
 echo -ne "Email list file (opz): "
 read EMAILLIST
 echo -ne "Wordlist ($DEFAULT_WORDLIST): "
@@ -159,7 +167,7 @@ read WORDLIST
 WORDLIST=${WORDLIST:-"$DEFAULT_WORDLIST"}
 
 # Create session log directory
-LOGDIR="$LOGBASE/${TARGET}_$(date +%Y%m%d_%H%M%S)"
+LOGDIR="$LOGBASE/${SESSION_NAME_SANITIZED}"
 mkdir -p "$LOGDIR" || { echo -e "${RED}Errore creazione $LOGDIR${NC}"; exit 1; }
 chmod 755 "$LOGDIR"
 echo -e "${BLUE}Sessione log: $LOGDIR${NC}\n"

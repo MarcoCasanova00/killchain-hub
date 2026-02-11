@@ -78,10 +78,15 @@ ensure_go_runtime() {
 
     log_info "Installing Go toolchain via apt (golang-go, git, build-essential)"
     if sudo apt update && sudo apt install -y golang-go git build-essential; then
-        # Ensure ~/go/bin is on PATH for current session and future shells
-        if ! echo "$PATH" | grep -q "$HOME/go/bin"; then
-            echo 'export PATH=$PATH:$HOME/go/bin' >> "$HOME/.bashrc"
-            export PATH="$PATH:$HOME/go/bin"
+        # Setup Go environment
+        export GOPATH="${GOPATH:-$HOME/go}"
+        mkdir -p "$GOPATH/bin" 2>/dev/null || true
+        
+        # Ensure GOPATH/bin is on PATH for current session and future shells
+        if ! echo "$PATH" | grep -q "$GOPATH/bin"; then
+            echo "export GOPATH=$GOPATH" >> "$HOME/.bashrc"
+            echo "export PATH=\$PATH:\$GOPATH/bin" >> "$HOME/.bashrc"
+            export PATH="$PATH:$GOPATH/bin"
         fi
         log_success "Go toolchain installed successfully"
         return 0
@@ -129,12 +134,17 @@ install_go_tool_runtime() {
     fi
 
     log_info "Installing $tool via Go: $install_cmd"
+    
+    # Ensure GOPATH is set and go/bin directory exists
+    export GOPATH="${GOPATH:-$HOME/go}"
+    mkdir -p "$GOPATH/bin" 2>/dev/null || true
+    
     # Filter out noisy "go: downloading" lines for cleaner UX
     eval "$install_cmd" 2>&1 | grep -v "go: downloading" || true
 
-    # Ensure ~/go/bin is in PATH for this session
-    if ! echo "$PATH" | grep -q "$HOME/go/bin"; then
-        export PATH="$PATH:$HOME/go/bin"
+    # Ensure GOPATH/bin is in PATH for this session
+    if ! echo "$PATH" | grep -q "$GOPATH/bin"; then
+        export PATH="$PATH:$GOPATH/bin"
     fi
 
     if command -v "$tool" >/dev/null 2>&1; then
@@ -619,9 +629,10 @@ exit 0
         CMD="$PROXY gospider -s https://$TARGET -d $DEPTH -t $GOSPIDER_THREADS -o ${LOGDIR}/gospider/"
     elif [ "$TOOL" = "2" ]; then
         log_info "Starting dirsearch enumeration"
-        # dirsearch often tries to create a 'reports' folder in the CWD
-        # we force it to use the log directory
-        CMD="$PROXY dirsearch -u https://$TARGET -w $WORDLIST --random-agent --reports-dir ${LOGDIR}/dirsearch_reports -o ${LOGDIR}/dirsearch.txt"
+        # Create reports directory if it doesn't exist
+        mkdir -p "${LOGDIR}/dirsearch_reports" 2>/dev/null || true
+        # dirsearch output - --reports-dir option was deprecated, using -o instead
+        CMD="$PROXY dirsearch -u https://$TARGET -w $WORDLIST --random-agent -o ${LOGDIR}/dirsearch.txt"
     elif [ "$TOOL" = "3" ]; then
         log_info "Starting gobuster directory brute force"
         CMD="$PROXY gobuster dir -u https://$TARGET -w $WORDLIST -t $GOBUSTER_THREADS -o ${LOGDIR}/gobuster.txt"

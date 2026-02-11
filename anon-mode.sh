@@ -63,6 +63,14 @@ if command -v sudo >/dev/null 2>&1; then
     fi
 fi
 
+# Ensure correct permissions for the current directory so anon can read scripts
+echo -e "${YELLOW}Aggiornamento permessi cartella per accesso 'anon'...${NC}"
+if [ -w "." ]; then
+   chmod -R 755 . 2>/dev/null || true
+elif command -v sudo >/dev/null 2>&1; then
+   sudo chmod -R 755 . 2>/dev/null || true
+fi
+
 # Pre-switch cleanup
 echo -e "${CYAN}Pulizia sessione corrente...${NC}"
 history -c >/dev/null 2>&1 || true

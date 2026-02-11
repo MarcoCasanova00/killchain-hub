@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# Ensure we are running in bash
+if [ -z "$BASH_VERSION" ]; then
+    exec bash "$0" "$@"
+fi
 # Quick Status Check - Run this anytime to verify your setup
 # Usage: ./status-check.sh
 

@@ -68,12 +68,12 @@ if command -v sudo >/dev/null 2>&1; then
     done
 fi
 
-# Ensure correct permissions for the current directory so anon can read scripts
-echo -e "${YELLOW}Aggiornamento permessi cartella per accesso 'anon'...${NC}"
+# Ensure correct permissions for the current directory so anon can write reports/data
+echo -e "${YELLOW}Aggiornamento permessi cartella (RWX) per accesso 'anon'...${NC}"
 if [ -w "." ]; then
-   chmod -R 755 . 2>/dev/null || true
+   chmod -R 777 . 2>/dev/null || true
 elif command -v sudo >/dev/null 2>&1; then
-   sudo chmod -R 755 . 2>/dev/null || true
+   sudo chmod -R 777 . 2>/dev/null || true
 fi
 
 # Fix traversal permissions if in a home directory (e.g. /home/kali)
@@ -102,7 +102,7 @@ echo ""
 
 # Switch user with environment
 stty echo 2>/dev/null || true
-ENV_CMD="export TMPDIR=/tmp; export HOME=/home/anon; export PATH=\$PATH:/usr/local/bin:/usr/sbin:/sbin; stty echo; exec /bin/bash -l"
+ENV_CMD="export TMPDIR=/tmp; export HOME=/home/anon; export PATH=\$PATH:/usr/local/bin:/usr/sbin:/sbin; stty sane; stty echo; exec /bin/bash -l"
 if command -v sudo >/dev/null 2>&1; then
     exec sudo -u anon /bin/bash -l -c "$ENV_CMD"
 else

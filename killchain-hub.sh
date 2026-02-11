@@ -23,11 +23,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Source logging library
 if [ -f "$SCRIPT_DIR/lib/logger.sh" ]; then
     source "$SCRIPT_DIR/lib/logger.sh"
+elif [ -f "./lib/logger.sh" ]; then
+    source "./lib/logger.sh"
 elif [ -f "/usr/local/bin/lib/logger.sh" ]; then
     source "/usr/local/bin/lib/logger.sh"
 else
     echo -e "${RED}ERROR: logger.sh not found!${NC}"
     echo "Expected at: $SCRIPT_DIR/lib/logger.sh"
+    echo "Or at: ./lib/logger.sh"
     exit 1
 fi
 
@@ -415,6 +418,8 @@ case $FASE in
     # Check if preflight script exists
     if [ -f "$SCRIPT_DIR/lib/preflight-check.sh" ]; then
         bash "$SCRIPT_DIR/lib/preflight-check.sh"
+    elif [ -f "./lib/preflight-check.sh" ]; then
+        bash "./lib/preflight-check.sh"
     elif [ -f "/usr/local/bin/lib/preflight-check.sh" ]; then
         bash "/usr/local/bin/lib/preflight-check.sh"
     else
@@ -656,6 +661,8 @@ exit 0
         # Check if enhanced evasion script exists
         if [ -f "$SCRIPT_DIR/lib/evasion.sh" ]; then
             sudo bash "$SCRIPT_DIR/lib/evasion.sh" | tee "${LOGDIR}/evasion_apply.txt"
+        elif [ -f "./lib/evasion.sh" ]; then
+            sudo bash "./lib/evasion.sh" | tee "${LOGDIR}/evasion_apply.txt"
         elif [ -f "/usr/local/bin/lib/evasion.sh" ]; then
             sudo bash "/usr/local/bin/lib/evasion.sh" | tee "${LOGDIR}/evasion_apply.txt"
         else

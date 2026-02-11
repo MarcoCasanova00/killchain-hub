@@ -71,6 +71,15 @@ elif command -v sudo >/dev/null 2>&1; then
    sudo chmod -R 755 . 2>/dev/null || true
 fi
 
+# Fix traversal permissions if in a home directory (e.g. /home/kali)
+PARENT_DIR=$(dirname "$(pwd)")
+if [[ "$PARENT_DIR" =~ ^/home/[^/]+$ ]]; then
+    if [ ! -r "$PARENT_DIR" ] || [ ! -x "$PARENT_DIR" ]; then
+        echo -e "${YELLOW}Fixing traverse permissions on $PARENT_DIR...${NC}"
+        sudo chmod o+x "$PARENT_DIR" 2>/dev/null || true
+    fi
+fi
+
 # Pre-switch cleanup
 echo -e "${CYAN}Pulizia sessione corrente...${NC}"
 history -c >/dev/null 2>&1 || true

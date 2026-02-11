@@ -510,7 +510,17 @@ exit 0
             exit 1
         fi
         log_info "Starting amass reconnaissance"
-        CMD="$PROXY amass enum -d $TARGET -o ${LOGDIR}/amass.txt"
+        # Amass (Go binary) often has issues with torsocks fork/exec.
+        # Prefer proxychains/proxychains4 if available, or run direct if torsocks is the only one.
+        if command -v proxychains4 >/dev/null 2>&1; then
+            CMD="proxychains4 amass enum -d $TARGET -o ${LOGDIR}/amass.txt"
+        elif command -v proxychains >/dev/null 2>&1; then
+            CMD="proxychains amass enum -d $TARGET -o ${LOGDIR}/amass.txt"
+        else
+            # If only torsocks is available, we use it but warn
+            CMD="$PROXY amass enum -d $TARGET -o ${LOGDIR}/amass.txt"
+            echo -e "${YELLOW}⚠ Using torsocks with Amass. If it fails, install proxychains4.${NC}"
+        fi
     elif [ "$TOOL" = "4" ]; then
         if ! command -v recon-ng &>/dev/null; then
             log_error "recon-ng not installed. Run Pre-Flight (0) and install it or use your package manager."

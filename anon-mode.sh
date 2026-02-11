@@ -53,7 +53,6 @@ fi
 if command -v sudo >/dev/null 2>&1; then
     if ! sudo -l -U anon 2>/dev/null | grep -q "NOPASSWD"; then
         echo -e "${YELLOW}⚠ Configurazione sudo per 'anon'...${NC}"
-        # We might not be able to write to /etc/sudoers.d if we are not root/sudoer ourselves
         if [ "$(id -u)" -eq 0 ] || sudo -n true 2>/dev/null; then
              echo "anon ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/anon >/dev/null 2>&1
              sudo chmod 440 /etc/sudoers.d/anon 2>/dev/null
@@ -61,6 +60,12 @@ if command -v sudo >/dev/null 2>&1; then
              echo -e "${RED}Impossibile configurare sudo automaticamente. Richiesti privilegi root.${NC}"
         fi
     fi
+    # Ensure anon is in standard groups for system access
+    for group in users std; do
+        if getent group "$group" >/dev/null 2>&1 && ! id -nG anon | grep -qw "$group"; then
+            sudo usermod -aG "$group" anon >/dev/null 2>&1 || true
+        fi
+    done
 fi
 
 # Ensure correct permissions for the current directory so anon can read scripts
@@ -96,14 +101,11 @@ echo -e "A:   ${CYAN}anon@pentest-lab (virtual)${NC}"
 echo ""
 
 # Switch user with environment
-# Switch user with environment
 stty echo 2>/dev/null || true
+ENV_CMD="export TMPDIR=/tmp; export HOME=/home/anon; export PATH=\$PATH:/usr/local/bin:/usr/sbin:/sbin; stty echo; exec /bin/bash -l"
 if command -v sudo >/dev/null 2>&1; then
-    # Use "script" trick if available to force PTY, otherwise direct exec
-    # But often just "bash -l" is enough if .profile is correct.
-    # We force "stty echo" explicitly in the command to be sure.
-    exec sudo -u anon /bin/bash -l -c "stty echo; exec /bin/bash -l"
+    exec sudo -u anon /bin/bash -l -c "$ENV_CMD"
 else
     # Fallback to su if sudo is missing
-    exec su - anon -c "stty echo; exec /bin/bash -l"
+    exec su - anon -c "$ENV_CMD"
 fi
